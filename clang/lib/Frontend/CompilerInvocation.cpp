@@ -2105,7 +2105,6 @@ static void ParseHeaderSearchArgs(HeaderSearchOptions &Opts, ArgList &Args,
     Opts.AddPrebuiltModulePath(A->getValue());
   Opts.DisableModuleHash = Args.hasArg(OPT_fdisable_module_hash);
   Opts.ModulesHashContent = Args.hasArg(OPT_fmodules_hash_content);
-  Opts.ModulesStrictContextHash = Args.hasArg(OPT_fmodules_strict_context_hash);
   Opts.ModulesValidateDiagnosticOptions =
       !Args.hasArg(OPT_fmodules_disable_diagnostic_validation);
   Opts.ImplicitModuleMaps = Args.hasArg(OPT_fimplicit_module_maps);
@@ -3637,6 +3636,15 @@ bool CompilerInvocation::CreateFromArgs(CompilerInvocation &Res,
   unsigned MissingArgIndex, MissingArgCount;
   InputArgList Args = Opts.ParseArgs(CommandLineArgs, MissingArgIndex,
                                      MissingArgCount, IncludedFlagsBitmask);
+
+#define OPTION_WITH_MARSHALLING(PREFIX_TYPE, NAME, ID, KIND, GROUP, ALIAS,     \
+                                ALIASARGS, FLAGS, PARAM, HELPTEXT, METAVAR,    \
+                                VALUES, KEYPATH, IS_POSITIVE, DEFAULT_VALUE)   \
+  if (Option::KIND##Class == Option::FlagClass)                                \
+    Res.KEYPATH = Args.hasArg(OPT_##ID) && IS_POSITIVE;
+#include "clang/Driver/Options.inc"
+#undef OPTION_WITH_MARSHALLING
+
   LangOptions &LangOpts = *Res.getLangOpts();
 
   // Check for missing argument error.
