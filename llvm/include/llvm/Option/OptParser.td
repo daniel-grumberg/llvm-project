@@ -97,6 +97,7 @@ class Option<list<string> prefixes, string name, OptionKind kind> {
   OptionGroup Group = ?;
   Option Alias = ?;
   list<string> AliasArgs = [];
+  code KeyPath = ?;
 }
 
 // Helpers for defining options.
@@ -129,6 +130,7 @@ class HelpText<string text> { string HelpText = text; }
 class MetaVarName<string name> { string MetaVarName = name; }
 class Values<string value> { string Values = value; }
 class ValuesCode<code valuecode> { code ValuesCode = valuecode; }
+class KeyPath<code keypath> { code KeyPath = keypath; }
 
 // Predefined options.
 

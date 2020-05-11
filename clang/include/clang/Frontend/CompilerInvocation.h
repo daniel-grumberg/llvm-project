@@ -187,6 +187,8 @@ public:
   /// identifying the conditions under which the module was built.
   std::string getModuleHash(DiagnosticsEngine &Diags) const;
 
+  std::string getCC1CommandLine() const;
+
   /// @}
   /// @name Option Subgroups
   /// @{
