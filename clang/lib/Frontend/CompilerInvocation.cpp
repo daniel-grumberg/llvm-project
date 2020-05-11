@@ -3870,13 +3870,14 @@ std::string CompilerInvocation::getCC1CommandLine() const {
   llvm::raw_string_ostream CMDStream(CMDLine);
 #define PREFIX(PREFIX_TYPE, BRACED_INIT)                                       \
   const char *PREFIX_TYPE[4] = BRACED_INIT;
-#define OPTION_WITH_KEYPATH(PREFIX_TYPE, NAME, ID, KIND, GROUP, ALIAS,         \
-                            ALIASARGS, FLAGS, PARAM, HELPTEXT, METAVAR,        \
-                            VALUES, KEYPATH)                                   \
-  if (Option::KIND##Class == Option::FlagClass && this->KEYPATH)               \
+#define OPTION_WITH_MARSHALLING(PREFIX_TYPE, NAME, ID, KIND, GROUP, ALIAS,     \
+                                ALIASARGS, FLAGS, PARAM, HELPTEXT, METAVAR,    \
+                                VALUES, KEYPATH, IS_POSITIVE, DEFAULT_VALUE)   \
+  if (Option::KIND##Class == Option::FlagClass &&                              \
+      IS_POSITIVE != DEFAULT_VALUE && this->KEYPATH != DEFAULT_VALUE)          \
     CMDStream << " " << PREFIX_TYPE[0] << NAME;
 #include "clang/Driver/Options.inc"
-#undef OPTION_WITH_KEYPATH
+#undef OPTION_WITH_MARSHALLING
 #undef PREFIX
   return CMDStream.str();
 }
