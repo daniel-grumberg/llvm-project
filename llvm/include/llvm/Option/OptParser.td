@@ -80,6 +80,16 @@ class OptionGroup<string name> {
   list<OptionFlag> Flags = [];
 }
 
+// Add support for generating marshalling code
+
+class OptionMarshallingInfo<code keypath> {
+  code KeyPath = keypath;
+  // Used by the Flag option kind.
+  bit IsPositive = ?;
+  code DefaultValue = ?;
+  list<code> EnumValues = ?;
+}
+
 // Define the option class.
 
 class Option<list<string> prefixes, string name, OptionKind kind> {
@@ -97,7 +107,7 @@ class Option<list<string> prefixes, string name, OptionKind kind> {
   OptionGroup Group = ?;
   Option Alias = ?;
   list<string> AliasArgs = [];
-  code KeyPath = ?;
+  OptionMarshallingInfo MarshallingInfo = ?;
 }
 
 // Helpers for defining options.
@@ -130,7 +140,22 @@ class HelpText<string text> { string HelpText = text; }
 class MetaVarName<string name> { string MetaVarName = name; }
 class Values<string value> { string Values = value; }
 class ValuesCode<code valuecode> { code ValuesCode = valuecode; }
-class KeyPath<code keypath> { code KeyPath = keypath; }
+
+class MarshallingInfo<OptionMarshallingInfo info> { OptionMarshallingInfo MarshallingInfo = info; }
+class MarshallingFlag<code keypath, bit ispositive, code defaultvalue>
+  : OptionMarshallingInfo<keypath> {
+  bit IsPositive = ispositive;
+  code DefaultValue = defaultvalue;
+}
+class MarshallingString<code keypath, code defaultvalue>
+  : OptionMarshallingInfo<keypath> {
+  code DefaultValue = defaultvalue;
+}
+class MarshallingEnum<code keypath, code defaultvalue, list<code> enumvalues>
+  : OptionMarshallingInfo<keypath> {
+  code DefaultValue = defaultvalue;
+  list<code>EnumValues = enumvalues;
+}
 
 // Predefined options.
 

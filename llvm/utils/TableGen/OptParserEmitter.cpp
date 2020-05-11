@@ -33,6 +33,20 @@ static raw_ostream &write_cstring(raw_ostream &OS, llvm::StringRef Str) {
   return OS;
 }
 
+static void EmitMarshallingInfo(raw_ostream &OS, const Record &R) {
+  OS << R.getValueAsString("KeyPath");
+  OS << ", ";
+  if (!isa<UnsetInit>(R.getValueInit("IsPositive")))
+    OS << R.getValueAsBit("IsPositive");
+  else
+    OS << "INVALID";
+  OS << ", ";
+  if (!isa<UnsetInit>(R.getValueInit("DefaultValue")))
+    OS << R.getValueAsString("DefaultValue");
+  else
+    OS << "INVALID";
+}
+
 /// OptParserEmitter - This tablegen backend takes an input .td file
 /// describing a list of options and emits a data structure for parsing and
 /// working with those options when given an input command line.
@@ -231,17 +245,20 @@ void EmitOptParser(RecordKeeper &Records, raw_ostream &OS) {
   }
   OS << "#endif // OPTION\n";
 
-  OS << "#ifdef OPTION_WITH_KEYPATH\n";
+  OS << "#ifdef OPTION_WITH_MARSHALLING\n";
   for (unsigned i = 0, e = Opts.size(); i != e; ++i) {
     const Record &R = *Opts[i];
 
-    if (!isa<UnsetInit>(R.getValueInit("KeyPath"))) {
-      OS << "OPTION_WITH_KEYPATH(";
+    if (!isa<UnsetInit>(R.getValueInit("MarshallingInfo"))) {
+      OS << "OPTION_WITH_MARSHALLING(";
       WriteOptRecordFields(OS, R);
-      OS << ", " << R.getValueAsString("KeyPath") << ")\n";
+      OS << ", ";
+      EmitMarshallingInfo(
+          OS, *cast<DefInit>(R.getValueInit("MarshallingInfo"))->getDef());
+      OS << ")\n";
     }
   }
-  OS << "#endif // OPTION_WITH_KEYPATH\n";
+  OS << "#endif // OPTION_WITH_MARSHALLING\n";
 
   OS << "\n";
   OS << "#ifdef OPTTABLE_ARG_INIT\n";
