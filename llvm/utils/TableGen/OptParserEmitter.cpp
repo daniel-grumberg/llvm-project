@@ -135,12 +135,8 @@ void EmitOptParser(RecordKeeper &Records, raw_ostream &OS) {
 
   OS << "//////////\n";
   OS << "// Options\n\n";
-  for (unsigned I = 0, E = Opts.size(); I != E; ++I) {
-    const Record &R = *Opts[I];
 
-    // Start a single option entry.
-    OS << "OPTION(";
-
+  auto WriteOptRecordFields = [&](raw_ostream &OS, const Record &R) {
     // The option prefix;
     std::vector<StringRef> prf = R.getValueAsListOfStrings("Prefixes");
     OS << Prefixes[PrefixKeyT(prf.begin(), prf.end())] << ", ";
@@ -223,10 +219,29 @@ void EmitOptParser(RecordKeeper &Records, raw_ostream &OS) {
       write_cstring(OS, R.getValueAsString("Values"));
     else
       OS << "nullptr";
+  };
 
+  for (unsigned I = 0, E = Opts.size(); I != E; ++I) {
+    const Record &R = *Opts[I];
+
+    // Start a single option entry.
+    OS << "OPTION(";
+    WriteOptRecordFields(OS, R);
     OS << ")\n";
   }
   OS << "#endif // OPTION\n";
+
+  OS << "#ifdef OPTION_WITH_KEYPATH\n";
+  for (unsigned i = 0, e = Opts.size(); i != e; ++i) {
+    const Record &R = *Opts[i];
+
+    if (!isa<UnsetInit>(R.getValueInit("KeyPath"))) {
+      OS << "OPTION_WITH_KEYPATH(";
+      WriteOptRecordFields(OS, R);
+      OS << ", " << R.getValueAsString("KeyPath") << ")\n";
+    }
+  }
+  OS << "#endif // OPTION_WITH_KEYPATH\n";
 
   OS << "\n";
   OS << "#ifdef OPTTABLE_ARG_INIT\n";
@@ -251,8 +266,8 @@ void EmitOptParser(RecordKeeper &Records, raw_ostream &OS) {
             "OptTable!\");\n";
     }
     OS << "}\n";
+    }
+    OS << "\n";
+    OS << "#endif // OPTTABLE_ARG_INIT\n";
   }
-  OS << "\n";
-  OS << "#endif // OPTTABLE_ARG_INIT\n";
-}
 } // end namespace llvm

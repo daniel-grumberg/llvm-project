@@ -184,6 +184,8 @@ public:
   /// identifying the conditions under which the module was built.
   std::string getModuleHash() const;
 
+  std::string getCC1CommandLine() const;
+
   /// @}
   /// @name Option Subgroups
   /// @{
