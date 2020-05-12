@@ -51,6 +51,7 @@
 #include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/None.h"
 #include "llvm/ADT/Optional.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
@@ -3873,9 +3874,9 @@ std::string CompilerInvocation::getModuleHash() const {
   return llvm::APInt(64, code).toString(36, /*Signed=*/false);
 }
 
-std::string CompilerInvocation::getCC1CommandLine() const {
-  std::string CMDLine;
-  llvm::raw_string_ostream CMDStream(CMDLine);
+void CompilerInvocation::generateCC1CommandLine(
+    SmallVectorImpl<const char *> &Args,
+    llvm::function_ref<const char *(const Twine &)> StringAllocator) const {
 #define PREFIX(PREFIX_TYPE, BRACED_INIT)                                       \
   const char *PREFIX_TYPE[4] = BRACED_INIT;
 #define OPTION_WITH_MARSHALLING(PREFIX_TYPE, NAME, ID, KIND, GROUP, ALIAS,     \
@@ -3883,11 +3884,10 @@ std::string CompilerInvocation::getCC1CommandLine() const {
                                 VALUES, KEYPATH, IS_POSITIVE, DEFAULT_VALUE)   \
   if (Option::KIND##Class == Option::FlagClass &&                              \
       IS_POSITIVE != DEFAULT_VALUE && this->KEYPATH != DEFAULT_VALUE)          \
-    CMDStream << " " << PREFIX_TYPE[0] << NAME;
+    Args.push_back(StringAllocator(Twine(PREFIX_TYPE[0]) + NAME));
 #include "clang/Driver/Options.inc"
 #undef OPTION_WITH_MARSHALLING
 #undef PREFIX
-  return CMDStream.str();
 }
 
 namespace clang {

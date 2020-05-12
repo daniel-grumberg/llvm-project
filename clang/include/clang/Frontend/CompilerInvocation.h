@@ -186,7 +186,19 @@ public:
   /// identifying the conditions under which the module was built.
   std::string getModuleHash() const;
 
-  std::string getCC1CommandLine() const;
+  /// Generate a cc1-compatible command line arguments from this instance.
+  ///
+  /// \param [out] Args - The generated arguments. Note that the caller is
+  /// responsible for insersting the path to the clang executable and "-cc1" if
+  /// desired.
+  /// \param StringAllocator - A function that given a Twine can allocate
+  /// storage for a given command line argument and return a pointer to the
+  /// newly allocated string. The returned pointer is what gets appended to
+  /// Args.
+  void
+  generateCC1CommandLine(llvm::SmallVectorImpl<const char *> &Args,
+                         llvm::function_ref<const char *(const llvm::Twine &)>
+                             StringAllocator) const;
 
   /// @}
   /// @name Option Subgroups
