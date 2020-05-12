@@ -24,7 +24,15 @@ TEST(CompilerInvocation, CanGenerateCC1CommandLine) {
   CompilerInvocation CInvok;
   CompilerInvocation::CreateFromArgs(CInvok, Args, *Diags);
 
-  ASSERT_EQ(CInvok.getCC1CommandLine(), " -fmodules-strict-context-hash");
+  SmallVector<const char *, 32> GeneratedArgs;
+  SmallVector<std::string, 32> GeneratedArgsStorage;
+  auto StringAlloc = [&GeneratedArgsStorage](const Twine &Arg) {
+    return GeneratedArgsStorage.emplace_back(Arg.str()).c_str();
+  };
+
+  CInvok.generateCC1CommandLine(GeneratedArgs, StringAlloc);
+
+  ASSERT_STREQ(GeneratedArgs[0], "-fmodules-strict-context-hash");
 }
 
 } // anonymous namespace
