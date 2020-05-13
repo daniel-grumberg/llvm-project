@@ -472,7 +472,8 @@ private:
 
   /// Write out the signature and diagnostic options, and return the signature.
   ASTFileSignature writeUnhashedControlBlock(Preprocessor &PP,
-                                             ASTContext &Context);
+                                             ASTContext &Context,
+                                             StringRef ASTBlockBytes);
 
   /// Calculate hash of the pcm content.
   static ASTFileSignature createSignature(StringRef Bytes);

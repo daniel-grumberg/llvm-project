@@ -168,6 +168,10 @@ public:
   /// and modification time to identify this particular file.
   ASTFileSignature Signature;
 
+  /// The signature of the AST block of the module file, this can be used to
+  /// unique module files based on AST contents.
+  ASTFileSignature ASTSignature;
+
   /// Whether this module has been directly imported by the
   /// user.
   bool DirectlyImported = false;

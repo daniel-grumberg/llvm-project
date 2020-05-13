@@ -64,6 +64,7 @@
 #include "clang/Sema/ObjCMethodList.h"
 #include "clang/Sema/Sema.h"
 #include "clang/Sema/Weak.h"
+#include "clang/Serialization/ASTBitCodes.h"
 #include "clang/Serialization/ASTReader.h"
 #include "clang/Serialization/ASTRecordWriter.h"
 #include "clang/Serialization/InMemoryModuleCache.h"
@@ -961,6 +962,7 @@ void ASTWriter::WriteBlockInfoBlock() {
 
   BLOCK(UNHASHED_CONTROL_BLOCK);
   RECORD(SIGNATURE);
+  RECORD(AST_SIGNATURE);
   RECORD(DIAGNOSTIC_OPTIONS);
   RECORD(DIAG_PRAGMA_MAPPINGS);
 
@@ -1045,7 +1047,8 @@ ASTFileSignature ASTWriter::createSignature(StringRef Bytes) {
 }
 
 ASTFileSignature ASTWriter::writeUnhashedControlBlock(Preprocessor &PP,
-                                                      ASTContext &Context) {
+                                                      ASTContext &Context,
+                                                      StringRef ASTBlockBytes) {
   // Flush first to prepare the PCM hash (signature).
   Stream.FlushToWord();
   auto StartOfUnhashedControl = Stream.GetCurrentBitNo() >> 3;
@@ -1061,6 +1064,10 @@ ASTFileSignature ASTWriter::writeUnhashedControlBlock(Preprocessor &PP,
     Signature = createSignature(StringRef(Buffer.begin(), StartOfUnhashedControl));
     Record.append(Signature.begin(), Signature.end());
     Stream.EmitRecord(SIGNATURE, Record);
+    Record.clear();
+    ASTFileSignature ASTSignature = createSignature(ASTBlockBytes);
+    Record.append(ASTSignature.begin(), ASTSignature.end());
+    Stream.EmitRecord(AST_SIGNATURE, Record);
     Record.clear();
   }
 
@@ -4548,6 +4555,8 @@ ASTFileSignature ASTWriter::WriteASTCore(Sema &SemaRef, StringRef isysroot,
   populateInputFileIDs(Context.SourceMgr);
 
   // Write the remaining AST contents.
+  Stream.FlushToWord();
+  auto StartOfASTBlock = Stream.GetCurrentBitNo() >> 3;
   Stream.EnterSubblock(AST_BLOCK_ID, 5);
 
   // This is so that older clang versions, before the introduction
@@ -4909,6 +4918,11 @@ ASTFileSignature ASTWriter::WriteASTCore(Sema &SemaRef, StringRef isysroot,
       NumStatements, NumMacros, NumLexicalDeclContexts, NumVisibleDeclContexts};
   Stream.EmitRecord(STATISTICS, Record);
   Stream.ExitBlock();
+  Stream.FlushToWord();
+  auto EndOfASTBlock = Stream.GetCurrentBitNo() >> 3;
+
+  StringRef ASTBlockBytes(Buffer.begin() + StartOfASTBlock,
+                          EndOfASTBlock - StartOfASTBlock);
 
   // Write the control block
   WriteControlBlock(PP, Context, isysroot, OutputFile);
@@ -4917,7 +4931,7 @@ ASTFileSignature ASTWriter::WriteASTCore(Sema &SemaRef, StringRef isysroot,
   for (const auto &ExtWriter : ModuleFileExtensionWriters)
     WriteModuleFileExtension(SemaRef, *ExtWriter);
 
-  return writeUnhashedControlBlock(PP, Context);
+  return writeUnhashedControlBlock(PP, Context, ASTBlockBytes);
 }
 
 void ASTWriter::WriteDeclUpdatesBlocks(RecordDataImpl &OffsetsRecord) {

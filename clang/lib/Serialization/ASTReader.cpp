@@ -4734,6 +4734,10 @@ ASTReader::ASTReadResult ASTReader::readUnhashedControlBlockImpl(
       if (F)
         std::copy(Record.begin(), Record.end(), F->Signature.data());
       break;
+    case AST_SIGNATURE:
+      if (F)
+        std::copy(Record.begin(), Record.end(), F->ASTSignature.data());
+      break;
     case DIAGNOSTIC_OPTIONS: {
       bool Complain = (ClientLoadCapabilities & ARR_OutOfDate) == 0;
       if (Listener && ValidateDiagnosticOptions &&

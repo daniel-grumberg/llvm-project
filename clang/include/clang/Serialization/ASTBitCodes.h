@@ -394,6 +394,9 @@ namespace serialization {
       /// Record code for the signature that identifiers this AST file.
       SIGNATURE = 1,
 
+      /// Record code for the signature of the AST block.
+      AST_SIGNATURE,
+
       /// Record code for the diagnostic options table.
       DIAGNOSTIC_OPTIONS,
 
