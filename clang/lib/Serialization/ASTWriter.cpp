@@ -10,14 +10,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "clang/AST/OpenMPClause.h"
-#include "clang/Serialization/ASTRecordWriter.h"
 #include "ASTCommon.h"
 #include "ASTReaderInternals.h"
 #include "MultiOnDiskHashTable.h"
-#include "clang/AST/AbstractTypeWriter.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/ASTUnresolvedSet.h"
+#include "clang/AST/AbstractTypeWriter.h"
 #include "clang/AST/Attr.h"
 #include "clang/AST/Decl.h"
 #include "clang/AST/DeclBase.h"
@@ -31,6 +29,7 @@
 #include "clang/AST/ExprCXX.h"
 #include "clang/AST/LambdaCapture.h"
 #include "clang/AST/NestedNameSpecifier.h"
+#include "clang/AST/OpenMPClause.h"
 #include "clang/AST/RawCommentList.h"
 #include "clang/AST/TemplateName.h"
 #include "clang/AST/Type.h"
@@ -66,6 +65,7 @@
 #include "clang/Sema/Sema.h"
 #include "clang/Sema/Weak.h"
 #include "clang/Serialization/ASTReader.h"
+#include "clang/Serialization/ASTRecordWriter.h"
 #include "clang/Serialization/InMemoryModuleCache.h"
 #include "clang/Serialization/ModuleFile.h"
 #include "clang/Serialization/ModuleFileExtension.h"
@@ -80,6 +80,7 @@
 #include "llvm/ADT/PointerIntPair.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/ScopeExit.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/SmallVector.h"
@@ -1388,23 +1389,8 @@ void ASTWriter::WriteControlBlock(Preprocessor &PP, ASTContext &Context,
   Stream.ExitBlock();
 }
 
-namespace  {
-
-/// An input file.
-struct InputFileEntry {
-  const FileEntry *File;
-  bool IsSystemFile;
-  bool IsTransient;
-  bool BufferOverridden;
-  bool IsTopLevelModuleMap;
-  uint32_t ContentHash[2];
-};
-
-} // namespace
-
 void ASTWriter::WriteInputFiles(SourceManager &SourceMgr,
-                                HeaderSearchOptions &HSOpts,
-                                bool Modules) {
+                                HeaderSearchOptions &HSOpts, bool Modules) {
   using namespace llvm;
 
   Stream.EnterSubblock(INPUT_FILES_BLOCK_ID, 4);
@@ -1428,66 +1414,12 @@ void ASTWriter::WriteInputFiles(SourceManager &SourceMgr,
   IFHAbbrev->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 32));
   unsigned IFHAbbrevCode = Stream.EmitAbbrev(std::move(IFHAbbrev));
 
-  // Get all ContentCache objects for files, sorted by whether the file is a
-  // system one or not. System files go at the back, users files at the front.
-  std::deque<InputFileEntry> SortedFiles;
-  for (unsigned I = 1, N = SourceMgr.local_sloc_entry_size(); I != N; ++I) {
-    // Get this source location entry.
-    const SrcMgr::SLocEntry *SLoc = &SourceMgr.getLocalSLocEntry(I);
-    assert(&SourceMgr.getSLocEntry(FileID::get(I)) == SLoc);
-
-    // We only care about file entries that were not overridden.
-    if (!SLoc->isFile())
-      continue;
-    const SrcMgr::FileInfo &File = SLoc->getFile();
-    const SrcMgr::ContentCache *Cache = File.getContentCache();
-    if (!Cache->OrigEntry)
-      continue;
-
-    InputFileEntry Entry;
-    Entry.File = Cache->OrigEntry;
-    Entry.IsSystemFile = isSystem(File.getFileCharacteristic());
-    Entry.IsTransient = Cache->IsTransient;
-    Entry.BufferOverridden = Cache->BufferOverridden;
-    Entry.IsTopLevelModuleMap = isModuleMap(File.getFileCharacteristic()) &&
-                                File.getIncludeLoc().isInvalid();
-
-    auto ContentHash = hash_code(-1);
-    if (PP->getHeaderSearchInfo()
-            .getHeaderSearchOpts()
-            .ValidateASTInputFilesContent) {
-      auto *MemBuff = Cache->getRawBuffer();
-      if (MemBuff)
-        ContentHash = hash_value(MemBuff->getBuffer());
-      else
-        // FIXME: The path should be taken from the FileEntryRef.
-        PP->Diag(SourceLocation(), diag::err_module_unable_to_hash_content)
-            << Entry.File->getName();
-    }
-    auto CH = llvm::APInt(64, ContentHash);
-    Entry.ContentHash[0] =
-        static_cast<uint32_t>(CH.getLoBits(32).getZExtValue());
-    Entry.ContentHash[1] =
-        static_cast<uint32_t>(CH.getHiBits(32).getZExtValue());
-
-    if (Entry.IsSystemFile)
-      SortedFiles.push_back(Entry);
-    else
-      SortedFiles.push_front(Entry);
-  }
-
   unsigned UserFilesNum = 0;
   // Write out all of the input files.
   std::vector<uint64_t> InputFileOffsets;
-  for (const auto &Entry : SortedFiles) {
-    uint32_t &InputFileID = InputFileIDs[Entry.File];
-    if (InputFileID != 0)
-      continue; // already recorded this file.
-
+  for (const auto &Entry : SortedInputFiles) {
     // Record this entry's offset.
     InputFileOffsets.push_back(Stream.GetCurrentBitNo());
-
-    InputFileID = InputFileOffsets.size();
 
     if (!Entry.IsSystemFile)
       ++UserFilesNum;
@@ -1497,7 +1429,7 @@ void ASTWriter::WriteInputFiles(SourceManager &SourceMgr,
     {
       RecordData::value_type Record[] = {
           INPUT_FILE,
-          InputFileOffsets.size(),
+          InputFileIDs[Entry.File],
           (uint64_t)Entry.File->getSize(),
           (uint64_t)getTimestampForOutput(Entry.File),
           Entry.BufferOverridden,
@@ -2471,6 +2403,70 @@ unsigned ASTWriter::getLocalOrImportedSubmoduleID(Module *Mod) {
     return 0;
 
   return SubmoduleIDs[Mod] = NextSubmoduleID++;
+}
+
+void ASTWriter::populateInputFileIDs(SourceManager &SourceMgr) {
+  for (unsigned I = 1, N = SourceMgr.local_sloc_entry_size(); I != N; ++I) {
+    // Get this source location entry.
+    const SrcMgr::SLocEntry *SLoc = &SourceMgr.getLocalSLocEntry(I);
+    assert(&SourceMgr.getSLocEntry(FileID::get(I)) == SLoc);
+
+    // We only care about file entries that were not overridden.
+    if (!SLoc->isFile())
+      continue;
+    const SrcMgr::FileInfo &File = SLoc->getFile();
+    const SrcMgr::ContentCache *Cache = File.getContentCache();
+    if (!Cache->OrigEntry)
+      continue;
+
+    InputFileEntry Entry;
+    Entry.File = Cache->OrigEntry;
+    Entry.IsSystemFile = isSystem(File.getFileCharacteristic());
+    Entry.IsTransient = Cache->IsTransient;
+    Entry.BufferOverridden = Cache->BufferOverridden;
+    Entry.IsTopLevelModuleMap = isModuleMap(File.getFileCharacteristic()) &&
+                                File.getIncludeLoc().isInvalid();
+
+    auto ContentHash = llvm::hash_code(-1);
+    if (PP->getHeaderSearchInfo()
+            .getHeaderSearchOpts()
+            .ValidateASTInputFilesContent) {
+      auto *MemBuff = Cache->getRawBuffer();
+      if (MemBuff)
+        ContentHash = hash_value(MemBuff->getBuffer());
+      else
+        // FIXME: The path should be taken from the FileEntryRef.
+        PP->Diag(SourceLocation(), diag::err_module_unable_to_hash_content)
+            << Entry.File->getName();
+    }
+    auto CH = llvm::APInt(64, ContentHash);
+    Entry.ContentHash[0] =
+        static_cast<uint32_t>(CH.getLoBits(32).getZExtValue());
+    Entry.ContentHash[1] =
+        static_cast<uint32_t>(CH.getHiBits(32).getZExtValue());
+
+    if (Entry.IsSystemFile)
+      SortedInputFiles.push_back(Entry);
+    else
+      SortedInputFiles.push_front(Entry);
+  }
+
+  llvm::SmallPtrSet<const FileEntry *, 32> SeenFileEntries;
+  auto NewEnd =
+      std::remove_if(SortedInputFiles.begin(), SortedInputFiles.end(),
+                     [&SeenFileEntries](const InputFileEntry &Entry) {
+                       return !SeenFileEntries.insert(Entry.File).second;
+                     });
+  SortedInputFiles.erase(NewEnd, SortedInputFiles.end());
+
+  uint32_t NextID = 1;
+  for (const auto &Entry : SortedInputFiles) {
+    uint32_t &InputFileID = InputFileIDs[Entry.File];
+    if (InputFileID != 0)
+      continue; // already generated an ID for this file.
+
+    InputFileID = NextID++;
+  }
 }
 
 unsigned ASTWriter::getSubmoduleID(Module *Mod) {
@@ -4548,8 +4544,7 @@ ASTFileSignature ASTWriter::WriteASTCore(Sema &SemaRef, StringRef isysroot,
     }
   }
 
-  // Write the control block
-  WriteControlBlock(PP, Context, isysroot, OutputFile);
+  populateInputFileIDs(Context.SourceMgr);
 
   // Write the remaining AST contents.
   Stream.EnterSubblock(AST_BLOCK_ID, 5);
@@ -4917,6 +4912,9 @@ ASTFileSignature ASTWriter::WriteASTCore(Sema &SemaRef, StringRef isysroot,
   // Write the module file extension blocks.
   for (const auto &ExtWriter : ModuleFileExtensionWriters)
     WriteModuleFileExtension(SemaRef, *ExtWriter);
+
+  // Write the control block
+  WriteControlBlock(PP, Context, isysroot, OutputFile);
 
   return writeUnhashedControlBlock(PP, Context);
 }

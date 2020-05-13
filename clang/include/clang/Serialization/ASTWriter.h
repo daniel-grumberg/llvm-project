@@ -443,6 +443,23 @@ private:
   std::vector<std::unique_ptr<ModuleFileExtensionWriter>>
     ModuleFileExtensionWriters;
 
+  /// An input file.
+  struct InputFileEntry {
+    const FileEntry *File;
+    bool IsSystemFile;
+    bool IsTransient;
+    bool BufferOverridden;
+    bool IsTopLevelModuleMap;
+    uint32_t ContentHash[2];
+  };
+
+  /// All the ContentCache objects for files, sorted by whether the file is a
+  /// system one or not. System files go at the back, user files at the front.
+  std::deque<InputFileEntry> SortedInputFiles;
+
+  /// Generate IDs for the input files
+  void populateInputFileIDs(SourceManager &SourceMgr);
+
   /// Retrieve or create a submodule ID for this module.
   unsigned getSubmoduleID(Module *Mod);
 

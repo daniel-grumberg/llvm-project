@@ -2568,11 +2568,6 @@ ASTReader::ReadControlBlock(ModuleFile &F,
                             unsigned ClientLoadCapabilities) {
   BitstreamCursor &Stream = F.Stream;
 
-  if (llvm::Error Err = Stream.EnterSubBlock(CONTROL_BLOCK_ID)) {
-    Error(std::move(Err));
-    return Failure;
-  }
-
   // Lambda to read the unhashed control block the first time it's called.
   //
   // For PCM files, the unhashed control block cannot be read until after the
@@ -4549,8 +4544,45 @@ ASTReader::ReadASTCore(StringRef FileName,
     return Failure;
   }
 
-  // This is used for compatibility with older PCH formats.
-  bool HaveReadControlBlock = false;
+  {
+    // The control block needs to be read first but the AST block comes before
+    // it in the PCM, so lookahead to the control block and read it now.
+    BitstreamCursor &PreviousCursor = F.Stream;
+    SavedStreamPosition SavedPosition(PreviousCursor);
+    if (SkipCursorToBlock(Stream, CONTROL_BLOCK_ID))
+      return Failure;
+    switch (ReadControlBlock(F, Loaded, ImportedBy, ClientLoadCapabilities)) {
+    case Success:
+      // Check that we didn't try to load a non-module AST file as a module.
+      //
+      // FIXME: Should we also perform the converse check? Loading a module as
+      // a PCH file sort of works, but it's a bit wonky.
+      if ((Type == MK_ImplicitModule || Type == MK_ExplicitModule ||
+           Type == MK_PrebuiltModule) &&
+          F.ModuleName.empty()) {
+        auto Result = (Type == MK_ImplicitModule) ? OutOfDate : Failure;
+        if (Result != OutOfDate ||
+            (ClientLoadCapabilities & ARR_OutOfDate) == 0)
+          Diag(diag::err_module_file_not_module) << FileName;
+        return Result;
+      }
+      break;
+
+    case Failure:
+      return Failure;
+    case Missing:
+      return Missing;
+    case OutOfDate:
+      return OutOfDate;
+    case VersionMismatch:
+      return VersionMismatch;
+    case ConfigurationMismatch:
+      return ConfigurationMismatch;
+    case HadErrors:
+      return HadErrors;
+    }
+  }
+
   while (true) {
     Expected<llvm::BitstreamEntry> MaybeEntry = Stream.advance();
     if (!MaybeEntry) {
@@ -4571,41 +4603,7 @@ ASTReader::ReadASTCore(StringRef FileName,
     }
 
     switch (Entry.ID) {
-    case CONTROL_BLOCK_ID:
-      HaveReadControlBlock = true;
-      switch (ReadControlBlock(F, Loaded, ImportedBy, ClientLoadCapabilities)) {
-      case Success:
-        // Check that we didn't try to load a non-module AST file as a module.
-        //
-        // FIXME: Should we also perform the converse check? Loading a module as
-        // a PCH file sort of works, but it's a bit wonky.
-        if ((Type == MK_ImplicitModule || Type == MK_ExplicitModule ||
-             Type == MK_PrebuiltModule) &&
-            F.ModuleName.empty()) {
-          auto Result = (Type == MK_ImplicitModule) ? OutOfDate : Failure;
-          if (Result != OutOfDate ||
-              (ClientLoadCapabilities & ARR_OutOfDate) == 0)
-            Diag(diag::err_module_file_not_module) << FileName;
-          return Result;
-        }
-        break;
-
-      case Failure: return Failure;
-      case Missing: return Missing;
-      case OutOfDate: return OutOfDate;
-      case VersionMismatch: return VersionMismatch;
-      case ConfigurationMismatch: return ConfigurationMismatch;
-      case HadErrors: return HadErrors;
-      }
-      break;
-
     case AST_BLOCK_ID:
-      if (!HaveReadControlBlock) {
-        if ((ClientLoadCapabilities & ARR_VersionMismatch) == 0)
-          Diag(diag::err_pch_version_too_old);
-        return VersionMismatch;
-      }
-
       // Record that we've loaded this module.
       Loaded.push_back(ImportedModule(M, ImportedBy, ImportLoc));
       ShouldFinalizePCM = true;
