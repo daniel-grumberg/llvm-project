@@ -33,7 +33,7 @@ static raw_ostream &write_cstring(raw_ostream &OS, llvm::StringRef Str) {
   return OS;
 }
 
-static void EmitMarshallingInfo(raw_ostream &OS, const Record &R) {
+static void emitMarshallingInfo(raw_ostream &OS, const Record &R) {
   OS << R.getValueAsString("KeyPath");
   OS << ", ";
   if (!isa<UnsetInit>(R.getValueInit("IsPositive")))
@@ -253,7 +253,7 @@ void EmitOptParser(RecordKeeper &Records, raw_ostream &OS) {
       OS << "OPTION_WITH_MARSHALLING(";
       WriteOptRecordFields(OS, R);
       OS << ", ";
-      EmitMarshallingInfo(
+      emitMarshallingInfo(
           OS, *cast<DefInit>(R.getValueInit("MarshallingInfo"))->getDef());
       OS << ")\n";
     }
@@ -283,8 +283,8 @@ void EmitOptParser(RecordKeeper &Records, raw_ostream &OS) {
             "OptTable!\");\n";
     }
     OS << "}\n";
-    }
-    OS << "\n";
-    OS << "#endif // OPTTABLE_ARG_INIT\n";
   }
+  OS << "\n";
+  OS << "#endif // OPTTABLE_ARG_INIT\n";
+}
 } // end namespace llvm
