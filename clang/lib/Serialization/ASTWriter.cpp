@@ -4688,9 +4688,9 @@ ASTFileSignature ASTWriter::WriteASTCore(Sema &SemaRef, StringRef isysroot,
     //   c++-base-specifiers-id:i32
     //   type-id:i32)
     //
-    // module-kind is the ModuleKind enum value. If it is MK_PrebuiltModule or
-    // MK_ExplicitModule, then the module-name is the module name. Otherwise,
-    // it is the module file name.
+    // module-kind is the ModuleKind enum value. If it is MK_PrebuiltModule,
+    // MK_ExplicitModule or MK_ImplicitModule, then the module-name is the
+    // module name. Otherwise, it is the module file name.
     auto Abbrev = std::make_shared<BitCodeAbbrev>();
     Abbrev->Add(BitCodeAbbrevOp(MODULE_OFFSET_MAP));
     Abbrev->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Blob));
@@ -4703,10 +4703,11 @@ ASTFileSignature ASTWriter::WriteASTCore(Sema &SemaRef, StringRef isysroot,
 
         endian::Writer LE(Out, little);
         LE.write<uint8_t>(static_cast<uint8_t>(M.Kind));
-        StringRef Name =
-          M.Kind == MK_PrebuiltModule || M.Kind == MK_ExplicitModule
-          ? M.ModuleName
-          : M.FileName;
+        StringRef Name = M.Kind == MK_PrebuiltModule ||
+                                 M.Kind == MK_ExplicitModule ||
+                                 M.Kind == MK_ImplicitModule
+                             ? M.ModuleName
+                             : M.FileName;
         LE.write<uint16_t>(Name.size());
         Out.write(Name.data(), Name.size());
 

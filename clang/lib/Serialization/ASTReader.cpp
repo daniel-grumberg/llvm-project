@@ -3832,17 +3832,18 @@ void ASTReader::ReadModuleOffsetMap(ModuleFile &F) const {
 
   while (Data < DataEnd) {
     // FIXME: Looking up dependency modules by filename is horrible. Let's
-    // start fixing this with prebuilt and explicit modules and see how it
-    // goes...
+    // start fixing this with prebuilt, explicit and implicit modules and see
+    // how it goes...
     using namespace llvm::support;
     ModuleKind Kind = static_cast<ModuleKind>(
       endian::readNext<uint8_t, little, unaligned>(Data));
     uint16_t Len = endian::readNext<uint16_t, little, unaligned>(Data);
     StringRef Name = StringRef((const char*)Data, Len);
     Data += Len;
-    ModuleFile *OM = (Kind == MK_PrebuiltModule || Kind == MK_ExplicitModule
-                      ? ModuleMgr.lookupByModuleName(Name)
-                      : ModuleMgr.lookupByFileName(Name));
+    ModuleFile *OM = (Kind == MK_PrebuiltModule || Kind == MK_ExplicitModule ||
+                              Kind == MK_ImplicitModule
+                          ? ModuleMgr.lookupByModuleName(Name)
+                          : ModuleMgr.lookupByFileName(Name));
     if (!OM) {
       std::string Msg =
           "SourceLocation remap refers to unknown module, cannot find ";
