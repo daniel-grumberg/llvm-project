@@ -4909,12 +4909,12 @@ ASTFileSignature ASTWriter::WriteASTCore(Sema &SemaRef, StringRef isysroot,
   Stream.EmitRecord(STATISTICS, Record);
   Stream.ExitBlock();
 
+  // Write the control block
+  WriteControlBlock(PP, Context, isysroot, OutputFile);
+
   // Write the module file extension blocks.
   for (const auto &ExtWriter : ModuleFileExtensionWriters)
     WriteModuleFileExtension(SemaRef, *ExtWriter);
-
-  // Write the control block
-  WriteControlBlock(PP, Context, isysroot, OutputFile);
 
   return writeUnhashedControlBlock(PP, Context);
 }
