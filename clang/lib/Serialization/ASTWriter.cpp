@@ -1139,9 +1139,6 @@ void ASTWriter::WriteControlBlock(Preprocessor &PP, ASTContext &Context,
   }
 
   if (WritingModule && WritingModule->Directory) {
-    SmallString<128> BaseDir(WritingModule->Directory->getName());
-    cleanPathForOutput(Context.getSourceManager().getFileManager(), BaseDir);
-
     // If the home of the module is the current working directory, then we
     // want to pick up the cwd of the build process loading the module, not
     // our cwd, when we load this module.
@@ -1156,14 +1153,8 @@ void ASTWriter::WriteControlBlock(Preprocessor &PP, ASTContext &Context,
       unsigned AbbrevCode = Stream.EmitAbbrev(std::move(Abbrev));
 
       RecordData::value_type Record[] = {MODULE_DIRECTORY};
-      Stream.EmitRecordWithBlob(AbbrevCode, Record, BaseDir);
+      Stream.EmitRecordWithBlob(AbbrevCode, Record, BaseDirectory);
     }
-
-    // Write out all other paths relative to the base directory if possible.
-    BaseDirectory.assign(BaseDir.begin(), BaseDir.end());
-  } else if (!isysroot.empty()) {
-    // Write out paths relative to the sysroot if possible.
-    BaseDirectory = std::string(isysroot);
   }
 
   // Module map file
@@ -4542,6 +4533,16 @@ ASTFileSignature ASTWriter::WriteASTCore(Sema &SemaRef, StringRef isysroot,
         DeleteExprsToAnalyze.push_back(DeleteLoc.second);
       }
     }
+  }
+
+  if (WritingModule && WritingModule->Directory) {
+    SmallString<128> BaseDir(WritingModule->Directory->getName());
+    cleanPathForOutput(Context.getSourceManager().getFileManager(), BaseDir);
+    // Write out all other paths relative to the base directory if possible.
+    BaseDirectory.assign(BaseDir.begin(), BaseDir.end());
+  } else if (!isysroot.empty()) {
+    // Write out paths relative to the sysroot if possible.
+    BaseDirectory = std::string(isysroot);
   }
 
   populateInputFileIDs(Context.SourceMgr);
