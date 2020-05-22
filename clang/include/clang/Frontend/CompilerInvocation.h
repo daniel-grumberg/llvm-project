@@ -153,7 +153,7 @@ public:
   /// one of the vaild-to-access (albeit arbitrary) states.
   ///
   /// \param [out] Res - The resulting invocation.
-  /// \param [in] CommandLineArgs - Array of argument strings, this should not
+  /// \param [in] CommandLineArgs - Array of argument strings, this must not
   /// contain "-cc1".
   static bool CreateFromArgs(CompilerInvocation &Res,
                              ArrayRef<const char *> CommandLineArgs,
