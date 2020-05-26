@@ -119,6 +119,55 @@ CompilerInvocationBase::CompilerInvocationBase(const CompilerInvocationBase &X)
 CompilerInvocationBase::~CompilerInvocationBase() = default;
 
 //===----------------------------------------------------------------------===//
+// Normalizers
+//===----------------------------------------------------------------------===//
+
+static std::string normalizeTriple(const Arg *Arg, const ArgList &ArgList,
+                                   DiagnosticsEngine &Diags,
+                                   StringRef DefaultTriple) {
+  return llvm::Triple::normalize(Arg->getValue());
+}
+
+static llvm::Reloc::Model
+normalizeRelocationModel(const Arg *Arg, const ArgList &ArgList,
+                         DiagnosticsEngine &Diags,
+                         llvm::Reloc::Model DefaultValue) {
+  StringRef ArgValue = Arg->getValue();
+  auto RM = llvm::StringSwitch<llvm::Optional<llvm::Reloc::Model>>(ArgValue)
+                .Case("static", llvm::Reloc::Static)
+                .Case("pic", llvm::Reloc::PIC_)
+                .Case("ropi", llvm::Reloc::ROPI)
+                .Case("rwpi", llvm::Reloc::RWPI)
+                .Case("ropi-rwpi", llvm::Reloc::ROPI_RWPI)
+                .Case("dynamic-no-pic", llvm::Reloc::DynamicNoPIC)
+                .Default(None);
+
+  if (RM.hasValue())
+    return *RM;
+
+  Diags.Report(diag::err_drv_invalid_value)
+      << Arg->getAsString(ArgList) << ArgValue;
+  return DefaultValue;
+}
+
+static const char *denormalizeRelocationModel(llvm::Reloc::Model RM) {
+  switch (RM) {
+  case llvm::Reloc::Static:
+    return "static";
+  case llvm::Reloc::PIC_:
+    return "pic";
+  case llvm::Reloc::DynamicNoPIC:
+    return "dynamic-no-pic";
+  case llvm::Reloc::ROPI:
+    return "ropi";
+  case llvm::Reloc::RWPI:
+    return "rwpi";
+  case llvm::Reloc::ROPI_RWPI:
+    return "ropi-rwpi";
+  }
+}
+
+//===----------------------------------------------------------------------===//
 // Deserialization (from args)
 //===----------------------------------------------------------------------===//
 
@@ -529,25 +578,6 @@ static void ParseCommentArgs(CommentOptions &Opts, ArgList &Args) {
   Opts.ParseAllComments = Args.hasArg(OPT_fparse_all_comments);
 }
 
-static llvm::Reloc::Model getRelocModel(ArgList &Args,
-                                        DiagnosticsEngine &Diags) {
-  if (Arg *A = Args.getLastArg(OPT_mrelocation_model)) {
-    StringRef Value = A->getValue();
-    auto RM = llvm::StringSwitch<llvm::Optional<llvm::Reloc::Model>>(Value)
-                  .Case("static", llvm::Reloc::Static)
-                  .Case("pic", llvm::Reloc::PIC_)
-                  .Case("ropi", llvm::Reloc::ROPI)
-                  .Case("rwpi", llvm::Reloc::RWPI)
-                  .Case("ropi-rwpi", llvm::Reloc::ROPI_RWPI)
-                  .Case("dynamic-no-pic", llvm::Reloc::DynamicNoPIC)
-                  .Default(None);
-    if (RM.hasValue())
-      return *RM;
-    Diags.Report(diag::err_drv_invalid_value) << A->getAsString(Args) << Value;
-  }
-  return llvm::Reloc::PIC_;
-}
-
 /// Create a new Regex instance out of the string value in \p RpassArg.
 /// It returns a pointer to the newly generated Regex instance.
 static std::shared_ptr<llvm::Regex>
@@ -928,7 +958,6 @@ static bool ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args, InputKind IK,
   Opts.StrictVTablePointers = Args.hasArg(OPT_fstrict_vtable_pointers);
   Opts.ForceEmitVTables = Args.hasArg(OPT_fforce_emit_vtables);
   Opts.UnwindTables = Args.hasArg(OPT_munwind_tables);
-  Opts.RelocationModel = getRelocModel(Args, Diags);
   Opts.ThreadModel =
       std::string(Args.getLastArgValue(OPT_mthread_model, "posix"));
   if (Opts.ThreadModel != "posix" && Opts.ThreadModel != "single")
@@ -3625,6 +3654,32 @@ static void ParseTargetArgs(TargetOptions &Opts, ArgList &Args,
   }
 }
 
+bool CompilerInvocation::parseSimpleArgs(const ArgList &Args,
+                                         DiagnosticsEngine &Diags) {
+#define OPTION_WITH_MARSHALLING
+#define OPTION_WITH_MARSHALLING_FLAG(PREFIX_TYPE, NAME, ID, KIND, GROUP,       \
+                                     ALIAS, ALIASARGS, FLAGS, PARAM, HELPTEXT, \
+                                     METAVAR, VALUES, ALWAYS_EMIT, KEYPATH,    \
+                                     IS_POSITIVE, DEFAULT_VALUE)               \
+  this->KEYPATH = Args.hasArg(OPT_##ID) && IS_POSITIVE;
+
+#define OPTION_WITH_MARSHALLING_STRING(                                        \
+    PREFIX_TYPE, NAME, ID, KIND, GROUP, ALIAS, ALIASARGS, FLAGS, PARAM,        \
+    HELPTEXT, METAVAR, VALUES, ALWAYS_EMIT, KEYPATH, DEFAULT_VALUE,            \
+    NORMALIZER, DENORMALIZER)                                                  \
+  {                                                                            \
+    auto Arg = Args.getLastArg(OPT_##ID);                                      \
+    this->KEYPATH =                                                            \
+        !Arg ? DEFAULT_VALUE : NORMALIZER(Arg, Args, Diags, DEFAULT_VALUE);    \
+  }
+
+#include "clang/Driver/Options.inc"
+#undef OPTION_WITH_MARSHALLING_STRING
+#undef OPTION_WITH_MARSHALLING_FLAG
+#undef OPTION_WITH_MARSHALLING
+  return true;
+}
+
 bool CompilerInvocation::CreateFromArgs(CompilerInvocation &Res,
                                         ArrayRef<const char *> CommandLineArgs,
                                         DiagnosticsEngine &Diags,
@@ -3637,15 +3692,6 @@ bool CompilerInvocation::CreateFromArgs(CompilerInvocation &Res,
   unsigned MissingArgIndex, MissingArgCount;
   InputArgList Args = Opts.ParseArgs(CommandLineArgs, MissingArgIndex,
                                      MissingArgCount, IncludedFlagsBitmask);
-
-#define OPTION_WITH_MARSHALLING(PREFIX_TYPE, NAME, ID, KIND, GROUP, ALIAS,     \
-                                ALIASARGS, FLAGS, PARAM, HELPTEXT, METAVAR,    \
-                                VALUES, KEYPATH, IS_POSITIVE, DEFAULT_VALUE)   \
-  if (Option::KIND##Class == Option::FlagClass)                                \
-    Res.KEYPATH = Args.hasArg(OPT_##ID) && IS_POSITIVE;
-#include "clang/Driver/Options.inc"
-#undef OPTION_WITH_MARSHALLING
-
   LangOptions &LangOpts = *Res.getLangOpts();
 
   // Check for missing argument error.
@@ -3667,6 +3713,7 @@ bool CompilerInvocation::CreateFromArgs(CompilerInvocation &Res,
     Success = false;
   }
 
+  Success &= Res.parseSimpleArgs(Args, Diags);
   Success &= ParseAnalyzerArgs(*Res.getAnalyzerOpts(), Args, Diags);
   Success &= ParseMigratorArgs(Res.getMigratorOpts(), Args);
   ParseDependencyOutputArgs(Res.getDependencyOutputOpts(), Args);
@@ -3879,13 +3926,31 @@ void CompilerInvocation::generateCC1CommandLine(
     llvm::function_ref<const char *(const Twine &)> StringAllocator) const {
 #define PREFIX(PREFIX_TYPE, BRACED_INIT)                                       \
   const char *PREFIX_TYPE[4] = BRACED_INIT;
-#define OPTION_WITH_MARSHALLING(PREFIX_TYPE, NAME, ID, KIND, GROUP, ALIAS,     \
-                                ALIASARGS, FLAGS, PARAM, HELPTEXT, METAVAR,    \
-                                VALUES, KEYPATH, IS_POSITIVE, DEFAULT_VALUE)   \
-  if (Option::KIND##Class == Option::FlagClass &&                              \
-      IS_POSITIVE != DEFAULT_VALUE && this->KEYPATH != DEFAULT_VALUE)          \
+
+#define OPTION_WITH_MARSHALLING
+#define OPTION_WITH_MARSHALLING_FLAG(PREFIX_TYPE, NAME, ID, KIND, GROUP,       \
+                                     ALIAS, ALIASARGS, FLAGS, PARAM, HELPTEXT, \
+                                     METAVAR, VALUES, ALWAYS_EMIT, KEYPATH,    \
+                                     IS_POSITIVE, DEFAULT_VALUE)               \
+  if (FLAGS & options::CC1Option && IS_POSITIVE != DEFAULT_VALUE &&            \
+      (this->KEYPATH != DEFAULT_VALUE || ALWAYS_EMIT))                         \
     Args.push_back(StringAllocator(Twine(PREFIX_TYPE[0]) + NAME));
+
+#define OPTION_WITH_MARSHALLING_STRING(                                        \
+    PREFIX_TYPE, NAME, ID, KIND, GROUP, ALIAS, ALIASARGS, FLAGS, PARAM,        \
+    HELPTEXT, METAVAR, VALUES, ALWAYS_EMIT, KEYPATH, DEFAULT_VALUE,            \
+    NORMALIZER, DENORMALIZER)                                                  \
+  if ((FLAGS & options::CC1Option) &&                                          \
+      (this->KEYPATH != DEFAULT_VALUE || ALWAYS_EMIT)) {                       \
+    if (Option::KIND##Class == Option::SeparateClass) {                        \
+      Args.push_back(StringAllocator(Twine(PREFIX_TYPE[0]) + NAME));           \
+      Args.push_back(StringAllocator(DENORMALIZER(this->KEYPATH)));            \
+    }                                                                          \
+  }
+
 #include "clang/Driver/Options.inc"
+#undef OPTION_WITH_MARSHALLING_STRING
+#undef OPTION_WITH_MARSHALLING_FLAG
 #undef OPTION_WITH_MARSHALLING
 #undef PREFIX
 }

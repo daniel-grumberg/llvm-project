@@ -9,6 +9,7 @@
 #include "OptEmitter.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallString.h"
+#include "llvm/ADT/StringSwitch.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/TableGen/Record.h"
 #include "llvm/TableGen/TableGenBackend.h"
@@ -33,18 +34,18 @@ static raw_ostream &write_cstring(raw_ostream &OS, llvm::StringRef Str) {
   return OS;
 }
 
-static void emitMarshallingInfo(raw_ostream &OS, const Record &R) {
-  OS << R.getValueAsString("KeyPath");
+static void emitMarshallingInfoFlag(raw_ostream &OS, const Record *R) {
+  OS << R->getValueAsBit("IsPositive");
+  OS << ",";
+  OS << R->getValueAsString("DefaultValue");
+}
+
+static void emitMarshallingInfoString(raw_ostream &OS, const Record *R) {
+  OS << R->getValueAsString("DefaultValue");
   OS << ", ";
-  if (!isa<UnsetInit>(R.getValueInit("IsPositive")))
-    OS << R.getValueAsBit("IsPositive");
-  else
-    OS << "INVALID";
+  OS << R->getValueAsString("Normalizer");
   OS << ", ";
-  if (!isa<UnsetInit>(R.getValueInit("DefaultValue")))
-    OS << R.getValueAsString("DefaultValue");
-  else
-    OS << "INVALID";
+  OS << R->getValueAsString("Denormalizer");
 }
 
 /// OptParserEmitter - This tablegen backend takes an input .td file
@@ -246,15 +247,30 @@ void EmitOptParser(RecordKeeper &Records, raw_ostream &OS) {
   OS << "#endif // OPTION\n";
 
   OS << "#ifdef OPTION_WITH_MARSHALLING\n";
-  for (unsigned i = 0, e = Opts.size(); i != e; ++i) {
-    const Record &R = *Opts[i];
+  for (unsigned I = 0, E = Opts.size(); I != E; ++I) {
+    const Record &R = *Opts[I];
 
     if (!isa<UnsetInit>(R.getValueInit("MarshallingInfo"))) {
-      OS << "OPTION_WITH_MARSHALLING(";
+      Record *MarshallingInfoRecord =
+          cast<DefInit>(R.getValueInit("MarshallingInfo"))->getDef();
+      StringRef KindStr = MarshallingInfoRecord->getValueAsString("Kind");
+      auto KindInfoPair =
+          StringSwitch<std::pair<
+              const char *, llvm::function_ref<void(raw_ostream &, Record *)>>>(
+              KindStr)
+              .Case("flag", std::make_pair("OPTION_WITH_MARSHALLING_FLAG",
+                                           &emitMarshallingInfoFlag))
+              .Case("string", std::make_pair("OPTION_WITH_MARSHALLING_STRING",
+                                             &emitMarshallingInfoString))
+              .Default(std::make_pair("", nullptr));
+      OS << KindInfoPair.first << "(";
       WriteOptRecordFields(OS, R);
       OS << ", ";
-      emitMarshallingInfo(
-          OS, *cast<DefInit>(R.getValueInit("MarshallingInfo"))->getDef());
+      OS << MarshallingInfoRecord->getValueAsBit("ShouldAlwaysEmit");
+      OS << ", ";
+      OS << MarshallingInfoRecord->getValueAsString("KeyPath");
+      OS << ", ";
+      KindInfoPair.second(OS, MarshallingInfoRecord);
       OS << ")\n";
     }
   }

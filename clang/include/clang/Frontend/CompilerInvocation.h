@@ -238,6 +238,16 @@ public:
   }
 
   /// @}
+
+private:
+  /// Parse options for flags that expose marshalling information in their
+  /// table-gen definition
+  ///
+  /// \param Args - The argument list containing the arguments to parse
+  /// \param Diags - The DiagnosticsEngine associated with CreateFromArgs
+  /// \returns - True if parsing was successful, false otherwise
+  bool parseSimpleArgs(const llvm::opt::ArgList &Args,
+                       DiagnosticsEngine &Diags);
 };
 
 IntrusiveRefCntPtr<llvm::vfs::FileSystem>

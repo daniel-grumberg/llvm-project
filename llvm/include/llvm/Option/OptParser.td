@@ -81,13 +81,15 @@ class OptionGroup<string name> {
 }
 
 // Add support for generating marshalling code
-
-class OptionMarshallingInfo<code keypath> {
+class OptionMarshallingInfo<string kind, code keypath> {
+  string Kind = kind;
+  bit ShouldAlwaysEmit = 0;
   code KeyPath = keypath;
   // Used by the Flag option kind.
   bit IsPositive = ?;
   code DefaultValue = ?;
-  list<code> EnumValues = ?;
+  code Normalizer = ?;
+  code Denormalizer = ?;
 }
 
 // Define the option class.
@@ -143,20 +145,24 @@ class ValuesCode<code valuecode> { code ValuesCode = valuecode; }
 
 class MarshallingInfo<OptionMarshallingInfo info> { OptionMarshallingInfo MarshallingInfo = info; }
 class MarshallingFlag<code keypath, bit ispositive, code defaultvalue>
-  : OptionMarshallingInfo<keypath> {
+  : OptionMarshallingInfo<"flag", keypath> {
   bit IsPositive = ispositive;
   code DefaultValue = defaultvalue;
 }
-class MarshallingString<code keypath, code defaultvalue>
-  : OptionMarshallingInfo<keypath> {
-  code DefaultValue = defaultvalue;
+class MarshallingFlagAlwaysEmit<code keypath, bit ispositive, code defaultvalue>
+  : MarshallingFlag<keypath, ispositive, defaultvalue> {
+  let ShouldAlwaysEmit = 1;
 }
-class MarshallingEnum<code keypath, code defaultvalue, list<code> enumvalues>
-  : OptionMarshallingInfo<keypath> {
+class MarshallingString<code keypath, code defaultvalue, code normalizer, code denormalizer>
+  : OptionMarshallingInfo<"string", keypath> {
   code DefaultValue = defaultvalue;
-  list<code>EnumValues = enumvalues;
+  code Normalizer = normalizer;
+  code Denormalizer = denormalizer;
 }
-
+class MarshallingStringAlwaysEmit<code keypath, code defaultvalue, code normalizer, code denormalizer>
+  : MarshallingString<keypath, defaultvalue, normalizer, denormalizer> {
+  let ShouldAlwaysEmit = 1;
+}
 // Predefined options.
 
 // FIXME: Have generator validate that these appear in correct position (and

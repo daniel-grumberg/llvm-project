@@ -23,7 +23,8 @@ def target_cpu : Separate<["-"], "target-cpu">,
 def target_feature : Separate<["-"], "target-feature">,
   HelpText<"Target specific attributes">;
 def triple : Separate<["-"], "triple">,
-  HelpText<"Specify target triple (e.g. i686-apple-darwin9)">;
+  HelpText<"Specify target triple (e.g. i686-apple-darwin9)">,
+  MarshallingInfo<MarshallingStringAlwaysEmit<"TargetOpts->Triple", "llvm::sys::getDefaultTargetTriple()", "normalizeTriple", "">>;
 def target_abi : Separate<["-"], "target-abi">,
   HelpText<"Target a particular ABI type">;
 def target_sdk_version_EQ : Joined<["-"], "target-sdk-version=">,
@@ -212,7 +213,8 @@ def msave_temp_labels : Flag<["-"], "msave-temp-labels">,
            "Note this may change .s semantics and shouldn't generally be used "
            "on compiler-generated code.">;
 def mrelocation_model : Separate<["-"], "mrelocation-model">,
-  HelpText<"The relocation model to use">, Values<"static,pic,ropi,rwpi,ropi-rwpi,dynamic-no-pic">;
+  HelpText<"The relocation model to use">, Values<"static,pic,ropi,rwpi,ropi-rwpi,dynamic-no-pic">,
+  MarshallingInfo<MarshallingString<"CodeGenOpts.RelocationModel", "llvm::Reloc::PIC_", "normalizeRelocationModel", "denormalizeRelocationModel">>;
 def fno_math_builtin : Flag<["-"], "fno-math-builtin">,
   HelpText<"Disable implicit builtin knowledge of math functions">;
 }
