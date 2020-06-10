@@ -11,6 +11,7 @@
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/ADT/Twine.h"
+#include "llvm/Support/raw_ostream.h"
 #include "llvm/TableGen/Record.h"
 #include "llvm/TableGen/TableGenBackend.h"
 #include <cctype>
@@ -34,19 +35,49 @@ static raw_ostream &write_cstring(raw_ostream &OS, llvm::StringRef Str) {
   return OS;
 }
 
-static void emitMarshallingInfoFlag(raw_ostream &OS, const Record *R) {
-  OS << R->getValueAsBit("IsPositive");
-  OS << ",";
-  OS << R->getValueAsString("DefaultValue");
+static void emitMarshallingInfoFlag(raw_ostream &OS, const Record &R) {
+  OS << R.getValueAsBit("IsPositive");
 }
 
-static void emitMarshallingInfoString(raw_ostream &OS, const Record *R) {
-  OS << R->getValueAsString("DefaultValue");
+static void emitMarshallingInfoString(raw_ostream &OS, const Record &R) {
+  OS << R.getValueAsString("Normalizer");
   OS << ", ";
-  OS << R->getValueAsString("Normalizer");
-  OS << ", ";
-  OS << R->getValueAsString("Denormalizer");
+  OS << R.getValueAsString("Denormalizer");
 }
+
+static void emitScopedNormalizedValue(raw_ostream &OS,
+                                      StringRef NormalizedValuesScope,
+                                      StringRef NormalizedValue) {
+  if (!NormalizedValuesScope.empty())
+    OS << NormalizedValuesScope << "::";
+  OS << NormalizedValue;
+}
+
+static void emitValueTable(raw_ostream &OS, StringRef OptionID,
+                           StringRef Values, StringRef NormalizedValuesScope,
+                           std::vector<StringRef> NormalizedValues) {
+  SmallVector<StringRef, 8> SplitValues;
+  Values.split(SplitValues, ',');
+  assert(SplitValues.size() == NormalizedValues.size() &&
+         "The number of associated definitions doesn't match the number of "
+         "values");
+
+  SmallString<64> MacroName("HANDLE_");
+  MacroName += OptionID.upper();
+  MacroName += "_VALUES";
+  OS << "#ifdef " << MacroName << "\n";
+  for (unsigned I = 0, E = SplitValues.size(); I != E; ++I) {
+    OS << MacroName << "(\"" << SplitValues[I] << "\",";
+    emitScopedNormalizedValue(OS, NormalizedValuesScope, NormalizedValues[I]);
+    OS << ")\n";
+  }
+  OS << "#endif\n";
+}
+
+struct MarshallingKindInfo {
+  const char *MacroName;
+  void (*Emit)(raw_ostream &OS, const Record &R);
+};
 
 /// OptParserEmitter - This tablegen backend takes an input .td file
 /// describing a list of options and emits a data structure for parsing and
@@ -236,6 +267,7 @@ void EmitOptParser(RecordKeeper &Records, raw_ostream &OS) {
       OS << "nullptr";
   };
 
+  std::vector<const Record *> OptsWithMarshalling;
   for (unsigned I = 0, E = Opts.size(); I != E; ++I) {
     const Record &R = *Opts[I];
 
@@ -243,38 +275,51 @@ void EmitOptParser(RecordKeeper &Records, raw_ostream &OS) {
     OS << "OPTION(";
     WriteOptRecordFields(OS, R);
     OS << ")\n";
+    if (!isa<UnsetInit>(R.getValueInit("MarshallingKind")))
+      OptsWithMarshalling.push_back(&R);
   }
   OS << "#endif // OPTION\n";
 
-  OS << "#ifdef OPTION_WITH_MARSHALLING\n";
-  for (unsigned I = 0, E = Opts.size(); I != E; ++I) {
-    const Record &R = *Opts[I];
+  for (unsigned I = 0, E = OptsWithMarshalling.size(); I != E; ++I) {
+    const Record &R = *OptsWithMarshalling[I];
+    assert(!isa<UnsetInit>(R.getValueInit("KeyPath")) &&
+           !isa<UnsetInit>(R.getValueInit("DefaultValue")) &&
+           "Must provide at least a key-path and a default value for emitting "
+           "marshalling information");
+    StringRef KindStr = R.getValueAsString("MarshallingKind");
+    auto KindInfo = StringSwitch<MarshallingKindInfo>(KindStr)
+                        .Case("flag", {"OPTION_WITH_MARSHALLING_FLAG",
+                                       &emitMarshallingInfoFlag})
+                        .Case("string", {"OPTION_WITH_MARSHALLING_STRING",
+                                         &emitMarshallingInfoString})
+                        .Default({"", nullptr});
+    StringRef NormalizedValuesScope;
+    if (!isa<UnsetInit>(R.getValueInit("NormalizedValuesScope")))
+      NormalizedValuesScope = R.getValueAsString("NormalizedValuesScope");
 
-    if (!isa<UnsetInit>(R.getValueInit("MarshallingInfo"))) {
-      Record *MarshallingInfoRecord =
-          cast<DefInit>(R.getValueInit("MarshallingInfo"))->getDef();
-      StringRef KindStr = MarshallingInfoRecord->getValueAsString("Kind");
-      auto KindInfoPair =
-          StringSwitch<std::pair<
-              const char *, llvm::function_ref<void(raw_ostream &, Record *)>>>(
-              KindStr)
-              .Case("flag", std::make_pair("OPTION_WITH_MARSHALLING_FLAG",
-                                           &emitMarshallingInfoFlag))
-              .Case("string", std::make_pair("OPTION_WITH_MARSHALLING_STRING",
-                                             &emitMarshallingInfoString))
-              .Default(std::make_pair("", nullptr));
-      OS << KindInfoPair.first << "(";
-      WriteOptRecordFields(OS, R);
-      OS << ", ";
-      OS << MarshallingInfoRecord->getValueAsBit("ShouldAlwaysEmit");
-      OS << ", ";
-      OS << MarshallingInfoRecord->getValueAsString("KeyPath");
-      OS << ", ";
-      KindInfoPair.second(OS, MarshallingInfoRecord);
-      OS << ")\n";
+    OS << "#ifdef " << KindInfo.MacroName << "\n";
+    OS << KindInfo.MacroName << "(";
+    WriteOptRecordFields(OS, R);
+    OS << ", ";
+    OS << R.getValueAsBit("ShouldAlwaysEmit");
+    OS << ", ";
+    OS << R.getValueAsString("KeyPath");
+    OS << ", ";
+    emitScopedNormalizedValue(OS, NormalizedValuesScope,
+                              R.getValueAsString("DefaultValue"));
+    OS << ",";
+    KindInfo.Emit(OS, R);
+    OS << ")\n";
+    OS << "#endif\n";
+
+    if (!isa<UnsetInit>(R.getValueInit("NormalizedValues"))) {
+      assert(!isa<UnsetInit>(R.getValueInit("Values")) &&
+             "Cannot provide associated definitions for value-less options");
+      emitValueTable(OS, getOptionName(R), R.getValueAsString("Values"),
+                     NormalizedValuesScope,
+                     R.getValueAsListOfStrings("NormalizedValues"));
     }
   }
-  OS << "#endif // OPTION_WITH_MARSHALLING\n";
 
   OS << "\n";
   OS << "#ifdef OPTTABLE_ARG_INIT\n";

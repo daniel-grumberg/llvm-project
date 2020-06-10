@@ -80,18 +80,6 @@ class OptionGroup<string name> {
   list<OptionFlag> Flags = [];
 }
 
-// Add support for generating marshalling code
-class OptionMarshallingInfo<string kind, code keypath> {
-  string Kind = kind;
-  bit ShouldAlwaysEmit = 0;
-  code KeyPath = keypath;
-  // Used by the Flag option kind.
-  bit IsPositive = ?;
-  code DefaultValue = ?;
-  code Normalizer = ?;
-  code Denormalizer = ?;
-}
-
 // Define the option class.
 
 class Option<list<string> prefixes, string name, OptionKind kind> {
@@ -109,7 +97,17 @@ class Option<list<string> prefixes, string name, OptionKind kind> {
   OptionGroup Group = ?;
   Option Alias = ?;
   list<string> AliasArgs = [];
-  OptionMarshallingInfo MarshallingInfo = ?;
+  string MarshallingKind = ?;
+  code KeyPath = ?;
+  code NormalizedValuesScope = ?;
+  code DefaultValue = ?;
+  bit ShouldAlwaysEmit = 0;
+  // Used by the Flag option kind.
+  bit IsPositive = 1;
+  // Used by the String option kind.
+  code Normalizer = "";
+  code Denormalizer = "";
+  list<code> NormalizedValues = ?;
 }
 
 // Helpers for defining options.
@@ -143,26 +141,29 @@ class MetaVarName<string name> { string MetaVarName = name; }
 class Values<string value> { string Values = value; }
 class ValuesCode<code valuecode> { code ValuesCode = valuecode; }
 
-class MarshallingInfo<OptionMarshallingInfo info> { OptionMarshallingInfo MarshallingInfo = info; }
-class MarshallingFlag<code keypath, bit ispositive, code defaultvalue>
-  : OptionMarshallingInfo<"flag", keypath> {
-  bit IsPositive = ispositive;
+// Helpers for defining marshalling information.
+
+class MarshallingInfo<code keypath, code defaultvalue> {
+  code KeyPath = keypath;
   code DefaultValue = defaultvalue;
 }
-class MarshallingFlagAlwaysEmit<code keypath, bit ispositive, code defaultvalue>
-  : MarshallingFlag<keypath, ispositive, defaultvalue> {
-  let ShouldAlwaysEmit = 1;
+class MarshallingInfoString<code keypath, code defaultvalue>
+  : MarshallingInfo<keypath, defaultvalue> { string MarshallingKind = "string"; }
+
+class MarshallingInfoFlag<code keypath, code defaultvalue>
+  : MarshallingInfo<keypath, defaultvalue> {
+  string MarshallingKind = "flag";
 }
-class MarshallingString<code keypath, code defaultvalue, code normalizer, code denormalizer>
-  : OptionMarshallingInfo<"string", keypath> {
-  code DefaultValue = defaultvalue;
-  code Normalizer = normalizer;
-  code Denormalizer = denormalizer;
-}
-class MarshallingStringAlwaysEmit<code keypath, code defaultvalue, code normalizer, code denormalizer>
-  : MarshallingString<keypath, defaultvalue, normalizer, denormalizer> {
-  let ShouldAlwaysEmit = 1;
-}
+
+// Mixins for additional marshalling attributes.
+
+class IsNegative { bit IsPositive = 0; }
+class AlwaysEmit { bit ShouldWaysEmit = 1; }
+class Normalizer<code normalizer> { code Normalizer = normalizer; }
+class Denormalizer<code denormalizer> { code Denormalizer = denormalizer; }
+class NormalizedValuesScope<code scope> { code NormalizedValuesScope = scope; }
+class NormalizedValues<list<code> definitions> { list<code> NormalizedValues = definitions; } 
+
 // Predefined options.
 
 // FIXME: Have generator validate that these appear in correct position (and

@@ -24,7 +24,9 @@ def target_feature : Separate<["-"], "target-feature">,
   HelpText<"Target specific attributes">;
 def triple : Separate<["-"], "triple">,
   HelpText<"Specify target triple (e.g. i686-apple-darwin9)">,
-  MarshallingInfo<MarshallingStringAlwaysEmit<"TargetOpts->Triple", "llvm::sys::getDefaultTargetTriple()", "normalizeTriple", "">>;
+  NormalizedValuesScope<"llvm::sys">,
+  MarshallingInfoString<"TargetOpts->Triple", "getDefaultTargetTriple()">,
+  AlwaysEmit, Normalizer<"normalizeTriple">;
 def target_abi : Separate<["-"], "target-abi">,
   HelpText<"Target a particular ABI type">;
 def target_sdk_version_EQ : Joined<["-"], "target-sdk-version=">,
@@ -214,7 +216,10 @@ def msave_temp_labels : Flag<["-"], "msave-temp-labels">,
            "on compiler-generated code.">;
 def mrelocation_model : Separate<["-"], "mrelocation-model">,
   HelpText<"The relocation model to use">, Values<"static,pic,ropi,rwpi,ropi-rwpi,dynamic-no-pic">,
-  MarshallingInfo<MarshallingString<"CodeGenOpts.RelocationModel", "llvm::Reloc::PIC_", "normalizeRelocationModel", "denormalizeRelocationModel">>;
+  NormalizedValuesScope<"llvm::Reloc">,
+  NormalizedValues<["Static", "PIC_", "ROPI", "RWPI", "ROPI_RWPI", "DynamicNoPIC"]>,
+  MarshallingInfoString<"CodeGenOpts.RelocationModel", "PIC_">,
+  Normalizer<"normalizeRelocationModel">, Denormalizer<"denormalizeRelocationModel">;
 def fno_math_builtin : Flag<["-"], "fno-math-builtin">,
   HelpText<"Disable implicit builtin knowledge of math functions">;
 }
@@ -838,7 +843,7 @@ def fmodules_hash_content : Flag<["-"], "fmodules-hash-content">,
 def fmodules_strict_context_hash : Flag<["-"], "fmodules-strict-context-hash">,
   HelpText<"Enable hashing of all compiler options that could impact the "
            "semantics of a module in an implicit build">,
-  MarshallingInfo<MarshallingFlag<"HeaderSearchOpts->ModulesStrictContextHash", 1, "false">>;
+  MarshallingInfoFlag<"HeaderSearchOpts->ModulesStrictContextHash", "false">;
 def c_isystem : JoinedOrSeparate<["-"], "c-isystem">, MetaVarName<"<directory>">,
   HelpText<"Add directory to the C SYSTEM include search path">;
 def objc_isystem : JoinedOrSeparate<["-"], "objc-isystem">,

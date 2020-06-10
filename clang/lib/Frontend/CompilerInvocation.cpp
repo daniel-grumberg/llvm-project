@@ -134,12 +134,9 @@ normalizeRelocationModel(const Arg *Arg, const ArgList &ArgList,
                          llvm::Reloc::Model DefaultValue) {
   StringRef ArgValue = Arg->getValue();
   auto RM = llvm::StringSwitch<llvm::Optional<llvm::Reloc::Model>>(ArgValue)
-                .Case("static", llvm::Reloc::Static)
-                .Case("pic", llvm::Reloc::PIC_)
-                .Case("ropi", llvm::Reloc::ROPI)
-                .Case("rwpi", llvm::Reloc::RWPI)
-                .Case("ropi-rwpi", llvm::Reloc::ROPI_RWPI)
-                .Case("dynamic-no-pic", llvm::Reloc::DynamicNoPIC)
+#define HANDLE_MRELOCATION_MODEL_VALUES(V, D) .Case(V, D)
+#include "clang/Driver/Options.inc"
+#undef HANDLE_MRELOCATION_MODEL_VALUES
                 .Default(None);
 
   if (RM.hasValue())
@@ -152,18 +149,11 @@ normalizeRelocationModel(const Arg *Arg, const ArgList &ArgList,
 
 static const char *denormalizeRelocationModel(llvm::Reloc::Model RM) {
   switch (RM) {
-  case llvm::Reloc::Static:
-    return "static";
-  case llvm::Reloc::PIC_:
-    return "pic";
-  case llvm::Reloc::DynamicNoPIC:
-    return "dynamic-no-pic";
-  case llvm::Reloc::ROPI:
-    return "ropi";
-  case llvm::Reloc::RWPI:
-    return "rwpi";
-  case llvm::Reloc::ROPI_RWPI:
-    return "ropi-rwpi";
+#define HANDLE_MRELOCATION_MODEL_VALUES(V, D)                                  \
+  case D:                                                                      \
+    return V;
+#include "clang/Driver/Options.inc"
+#undef HANDLE_MRELOCATION_MODEL_VALUES
   }
 }
 
@@ -3656,11 +3646,10 @@ static void ParseTargetArgs(TargetOptions &Opts, ArgList &Args,
 
 bool CompilerInvocation::parseSimpleArgs(const ArgList &Args,
                                          DiagnosticsEngine &Diags) {
-#define OPTION_WITH_MARSHALLING
 #define OPTION_WITH_MARSHALLING_FLAG(PREFIX_TYPE, NAME, ID, KIND, GROUP,       \
                                      ALIAS, ALIASARGS, FLAGS, PARAM, HELPTEXT, \
                                      METAVAR, VALUES, ALWAYS_EMIT, KEYPATH,    \
-                                     IS_POSITIVE, DEFAULT_VALUE)               \
+                                     DEFAULT_VALUE, IS_POSITIVE)               \
   this->KEYPATH = Args.hasArg(OPT_##ID) && IS_POSITIVE;
 
 #define OPTION_WITH_MARSHALLING_STRING(                                        \
@@ -3927,11 +3916,10 @@ void CompilerInvocation::generateCC1CommandLine(
 #define PREFIX(PREFIX_TYPE, BRACED_INIT)                                       \
   const char *PREFIX_TYPE[4] = BRACED_INIT;
 
-#define OPTION_WITH_MARSHALLING
 #define OPTION_WITH_MARSHALLING_FLAG(PREFIX_TYPE, NAME, ID, KIND, GROUP,       \
                                      ALIAS, ALIASARGS, FLAGS, PARAM, HELPTEXT, \
                                      METAVAR, VALUES, ALWAYS_EMIT, KEYPATH,    \
-                                     IS_POSITIVE, DEFAULT_VALUE)               \
+                                     DEFAULT_VALUE, IS_POSITIVE)               \
   if (FLAGS & options::CC1Option && IS_POSITIVE != DEFAULT_VALUE &&            \
       (this->KEYPATH != DEFAULT_VALUE || ALWAYS_EMIT))                         \
     Args.push_back(StringAllocator(Twine(PREFIX_TYPE[0]) + NAME));
