@@ -122,39 +122,52 @@ CompilerInvocationBase::~CompilerInvocationBase() = default;
 // Normalizers
 //===----------------------------------------------------------------------===//
 
-static std::string normalizeTriple(const Arg *Arg, const ArgList &ArgList,
-                                   DiagnosticsEngine &Diags,
-                                   StringRef DefaultTriple) {
-  return llvm::Triple::normalize(Arg->getValue());
-}
-
-static llvm::Reloc::Model
-normalizeRelocationModel(const Arg *Arg, const ArgList &ArgList,
-                         DiagnosticsEngine &Diags,
-                         llvm::Reloc::Model DefaultValue) {
-  StringRef ArgValue = Arg->getValue();
-  auto RM = llvm::StringSwitch<llvm::Optional<llvm::Reloc::Model>>(ArgValue)
-#define HANDLE_MRELOCATION_MODEL_VALUES(V, D) .Case(V, D)
+#define SIMPLE_ENUM_VALUE_TABLE
 #include "clang/Driver/Options.inc"
-#undef HANDLE_MRELOCATION_MODEL_VALUES
-                .Default(None);
+#undef SIMPLE_ENUM_VALUE_TABLE
 
-  if (RM.hasValue())
-    return *RM;
+static llvm::Optional<unsigned> normalizeSimpleEnum(OptSpecifier Opt,
+                                                    unsigned TableIndex,
+                                                    const ArgList &Args,
+                                                    DiagnosticsEngine &Diags) {
+  assert(TableIndex >= 0);
+  assert(TableIndex < SimpleEnumValueTablesSize);
+  const SimpleEnumValueTable &Table = SimpleEnumValueTables[TableIndex];
+
+  auto Arg = Args.getLastArg(Opt);
+  if (!Arg)
+    return None;
+
+  StringRef ArgValue = Arg->getValue();
+  for (int I = 0, E = Table.Size; I != E; ++I)
+    if (ArgValue == Table.Table[I].Name)
+      return Table.Table[I].Value;
 
   Diags.Report(diag::err_drv_invalid_value)
-      << Arg->getAsString(ArgList) << ArgValue;
-  return DefaultValue;
+      << Arg->getAsString(Args) << ArgValue;
+  return None;
 }
 
-static const char *denormalizeRelocationModel(llvm::Reloc::Model RM) {
-  switch (RM) {
-#define HANDLE_MRELOCATION_MODEL_VALUES(V, D)                                  \
-  case D:                                                                      \
-    return V;
-#include "clang/Driver/Options.inc"
-#undef HANDLE_MRELOCATION_MODEL_VALUES
-  }
+static const char *denormalizeSimpleEnum(unsigned TableIndex, unsigned Value) {
+  assert(TableIndex >= 0);
+  assert(TableIndex < SimpleEnumValueTablesSize);
+  const SimpleEnumValueTable &Table = SimpleEnumValueTables[TableIndex];
+  for (int I = 0, E = Table.Size; I != E; ++I)
+    if (Value == Table.Table[I].Value)
+      return Table.Table[I].Name;
+
+  llvm::report_fatal_error("The simple enum value was not correctly defined in "
+                           "the tablegen option description");
+}
+
+static Optional<std::string> normalizeTriple(OptSpecifier Opt, int TableIndex,
+                                             const ArgList &Args,
+                                             DiagnosticsEngine &Diags) {
+
+  auto Arg = Args.getLastArg(Opt);
+  if (!Arg)
+    return None;
+  return llvm::Triple::normalize(Arg->getValue());
 }
 
 //===----------------------------------------------------------------------===//
@@ -3625,11 +3638,6 @@ static void ParseTargetArgs(TargetOptions &Opts, ArgList &Args,
   Opts.FeaturesAsWritten = Args.getAllArgValues(OPT_target_feature);
   Opts.LinkerVersion =
       std::string(Args.getLastArgValue(OPT_target_linker_version));
-  Opts.Triple = std::string(Args.getLastArgValue(OPT_triple));
-  // Use the default target triple if unspecified.
-  if (Opts.Triple.empty())
-    Opts.Triple = llvm::sys::getDefaultTargetTriple();
-  Opts.Triple = llvm::Triple::normalize(Opts.Triple);
   Opts.OpenCLExtensionsAsWritten = Args.getAllArgValues(OPT_cl_ext_EQ);
   Opts.ForceEnableInt128 = Args.hasArg(OPT_fforce_enable_int128);
   Opts.NVPTXUseShortPointers = Args.hasFlag(
@@ -3654,12 +3662,13 @@ bool CompilerInvocation::parseSimpleArgs(const ArgList &Args,
 
 #define OPTION_WITH_MARSHALLING_STRING(                                        \
     PREFIX_TYPE, NAME, ID, KIND, GROUP, ALIAS, ALIASARGS, FLAGS, PARAM,        \
-    HELPTEXT, METAVAR, VALUES, ALWAYS_EMIT, KEYPATH, DEFAULT_VALUE,            \
-    NORMALIZER, DENORMALIZER)                                                  \
+    HELPTEXT, METAVAR, VALUES, ALWAYS_EMIT, KEYPATH, DEFAULT_VALUE, TYPE,      \
+    NORMALIZER, DENORMALIZER, TABLE_INDEX)                                     \
   {                                                                            \
-    auto Arg = Args.getLastArg(OPT_##ID);                                      \
-    this->KEYPATH =                                                            \
-        !Arg ? DEFAULT_VALUE : NORMALIZER(Arg, Args, Diags, DEFAULT_VALUE);    \
+    if (auto MaybeValue = NORMALIZER(OPT_##ID, TABLE_INDEX, Args, Diags))      \
+      this->KEYPATH = static_cast<TYPE>(*MaybeValue);                          \
+    else                                                                       \
+      this->KEYPATH = DEFAULT_VALUE;                                           \
   }
 
 #include "clang/Driver/Options.inc"
@@ -3927,12 +3936,13 @@ void CompilerInvocation::generateCC1CommandLine(
 #define OPTION_WITH_MARSHALLING_STRING(                                        \
     PREFIX_TYPE, NAME, ID, KIND, GROUP, ALIAS, ALIASARGS, FLAGS, PARAM,        \
     HELPTEXT, METAVAR, VALUES, ALWAYS_EMIT, KEYPATH, DEFAULT_VALUE,            \
-    NORMALIZER, DENORMALIZER)                                                  \
+    NORMALIZER_RET_TY, NORMALIZER, DENORMALIZER, TABLE_INDEX)                  \
   if ((FLAGS & options::CC1Option) &&                                          \
       (this->KEYPATH != DEFAULT_VALUE || ALWAYS_EMIT)) {                       \
     if (Option::KIND##Class == Option::SeparateClass) {                        \
       Args.push_back(StringAllocator(Twine(PREFIX_TYPE[0]) + NAME));           \
-      Args.push_back(StringAllocator(DENORMALIZER(this->KEYPATH)));            \
+      Args.push_back(                                                          \
+          StringAllocator(DENORMALIZER(TABLE_INDEX, this->KEYPATH)));          \
     }                                                                          \
   }
 

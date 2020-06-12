@@ -99,12 +99,13 @@ class Option<list<string> prefixes, string name, OptionKind kind> {
   list<string> AliasArgs = [];
   string MarshallingKind = ?;
   code KeyPath = ?;
-  code NormalizedValuesScope = ?;
   code DefaultValue = ?;
   bit ShouldAlwaysEmit = 0;
   // Used by the Flag option kind.
   bit IsPositive = 1;
   // Used by the String option kind.
+  code NormalizerRetTy = ?;
+  code NormalizedValuesScope = "";
   code Normalizer = "";
   code Denormalizer = "";
   list<code> NormalizedValues = ?;
@@ -147,8 +148,11 @@ class MarshallingInfo<code keypath, code defaultvalue> {
   code KeyPath = keypath;
   code DefaultValue = defaultvalue;
 }
-class MarshallingInfoString<code keypath, code defaultvalue>
-  : MarshallingInfo<keypath, defaultvalue> { string MarshallingKind = "string"; }
+class MarshallingInfoString<code keypath, code defaultvalue, code normalizerretty>
+  : MarshallingInfo<keypath, defaultvalue> {
+  string MarshallingKind = "string";
+  code NormalizerRetTy = normalizerretty;
+}
 
 class MarshallingInfoFlag<code keypath, code defaultvalue>
   : MarshallingInfo<keypath, defaultvalue> {
@@ -163,6 +167,10 @@ class Normalizer<code normalizer> { code Normalizer = normalizer; }
 class Denormalizer<code denormalizer> { code Denormalizer = denormalizer; }
 class NormalizedValuesScope<code scope> { code NormalizedValuesScope = scope; }
 class NormalizedValues<list<code> definitions> { list<code> NormalizedValues = definitions; } 
+class AutoNormalizeEnum {
+  code Normalizer = "normalizeSimpleEnum";
+  code Denormalizer = "denormalizeSimpleEnum";
+}
 
 // Predefined options.
 
