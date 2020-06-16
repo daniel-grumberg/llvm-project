@@ -167,6 +167,7 @@ class Normalizer<code normalizer> { code Normalizer = normalizer; }
 class Denormalizer<code denormalizer> { code Denormalizer = denormalizer; }
 class NormalizedValuesScope<code scope> { code NormalizedValuesScope = scope; }
 class NormalizedValues<list<code> definitions> { list<code> NormalizedValues = definitions; } 
+class DenormalizeString { code Denormalizer = "denormalizeString"; }
 class AutoNormalizeEnum {
   code Normalizer = "normalizeSimpleEnum";
   code Denormalizer = "denormalizeSimpleEnum";

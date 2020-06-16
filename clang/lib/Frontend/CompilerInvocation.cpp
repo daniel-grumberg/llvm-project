@@ -148,7 +148,8 @@ static llvm::Optional<unsigned> normalizeSimpleEnum(OptSpecifier Opt,
   return None;
 }
 
-static const char *denormalizeSimpleEnum(unsigned TableIndex, unsigned Value) {
+static const char *denormalizeSimpleEnum(CompilerInvocation::StringAllocator SA,
+                                         unsigned TableIndex, unsigned Value) {
   assert(TableIndex >= 0);
   assert(TableIndex < SimpleEnumValueTablesSize);
   const SimpleEnumValueTable &Table = SimpleEnumValueTables[TableIndex];
@@ -158,6 +159,12 @@ static const char *denormalizeSimpleEnum(unsigned TableIndex, unsigned Value) {
 
   llvm::report_fatal_error("The simple enum value was not correctly defined in "
                            "the tablegen option description");
+}
+
+static const char *denormalizeString(CompilerInvocation::StringAllocator SA,
+                                     unsigned TableIndex,
+                                     const std::string &Value) {
+  return Value.c_str();
 }
 
 static Optional<std::string> normalizeTriple(OptSpecifier Opt, int TableIndex,
@@ -3656,14 +3663,14 @@ bool CompilerInvocation::parseSimpleArgs(const ArgList &Args,
                                          DiagnosticsEngine &Diags) {
 #define OPTION_WITH_MARSHALLING_FLAG(PREFIX_TYPE, NAME, ID, KIND, GROUP,       \
                                      ALIAS, ALIASARGS, FLAGS, PARAM, HELPTEXT, \
-                                     METAVAR, VALUES, ALWAYS_EMIT, KEYPATH,    \
-                                     DEFAULT_VALUE, IS_POSITIVE)               \
+                                     METAVAR, VALUES, SPELLING, ALWAYS_EMIT,   \
+                                     KEYPATH, DEFAULT_VALUE, IS_POSITIVE)      \
   this->KEYPATH = Args.hasArg(OPT_##ID) && IS_POSITIVE;
 
 #define OPTION_WITH_MARSHALLING_STRING(                                        \
     PREFIX_TYPE, NAME, ID, KIND, GROUP, ALIAS, ALIASARGS, FLAGS, PARAM,        \
-    HELPTEXT, METAVAR, VALUES, ALWAYS_EMIT, KEYPATH, DEFAULT_VALUE, TYPE,      \
-    NORMALIZER, DENORMALIZER, TABLE_INDEX)                                     \
+    HELPTEXT, METAVAR, VALUES, SPELLING, ALWAYS_EMIT, KEYPATH, DEFAULT_VALUE,  \
+    TYPE, NORMALIZER, DENORMALIZER, TABLE_INDEX)                               \
   {                                                                            \
     if (auto MaybeValue = NORMALIZER(OPT_##ID, TABLE_INDEX, Args, Diags))      \
       this->KEYPATH = static_cast<TYPE>(*MaybeValue);                          \
@@ -3674,7 +3681,6 @@ bool CompilerInvocation::parseSimpleArgs(const ArgList &Args,
 #include "clang/Driver/Options.inc"
 #undef OPTION_WITH_MARSHALLING_STRING
 #undef OPTION_WITH_MARSHALLING_FLAG
-#undef OPTION_WITH_MARSHALLING
   return true;
 }
 
@@ -3920,37 +3926,30 @@ std::string CompilerInvocation::getModuleHash() const {
 }
 
 void CompilerInvocation::generateCC1CommandLine(
-    SmallVectorImpl<const char *> &Args,
-    llvm::function_ref<const char *(const Twine &)> StringAllocator) const {
-#define PREFIX(PREFIX_TYPE, BRACED_INIT)                                       \
-  const char *PREFIX_TYPE[4] = BRACED_INIT;
-
+    SmallVectorImpl<const char *> &Args, StringAllocator SA) const {
 #define OPTION_WITH_MARSHALLING_FLAG(PREFIX_TYPE, NAME, ID, KIND, GROUP,       \
                                      ALIAS, ALIASARGS, FLAGS, PARAM, HELPTEXT, \
-                                     METAVAR, VALUES, ALWAYS_EMIT, KEYPATH,    \
-                                     DEFAULT_VALUE, IS_POSITIVE)               \
+                                     METAVAR, VALUES, SPELLING, ALWAYS_EMIT,   \
+                                     KEYPATH, DEFAULT_VALUE, IS_POSITIVE)      \
   if (FLAGS & options::CC1Option && IS_POSITIVE != DEFAULT_VALUE &&            \
       (this->KEYPATH != DEFAULT_VALUE || ALWAYS_EMIT))                         \
-    Args.push_back(StringAllocator(Twine(PREFIX_TYPE[0]) + NAME));
+    Args.push_back(SPELLING);
 
 #define OPTION_WITH_MARSHALLING_STRING(                                        \
     PREFIX_TYPE, NAME, ID, KIND, GROUP, ALIAS, ALIASARGS, FLAGS, PARAM,        \
-    HELPTEXT, METAVAR, VALUES, ALWAYS_EMIT, KEYPATH, DEFAULT_VALUE,            \
+    HELPTEXT, METAVAR, VALUES, SPELLING, ALWAYS_EMIT, KEYPATH, DEFAULT_VALUE,  \
     NORMALIZER_RET_TY, NORMALIZER, DENORMALIZER, TABLE_INDEX)                  \
   if ((FLAGS & options::CC1Option) &&                                          \
       (this->KEYPATH != DEFAULT_VALUE || ALWAYS_EMIT)) {                       \
     if (Option::KIND##Class == Option::SeparateClass) {                        \
-      Args.push_back(StringAllocator(Twine(PREFIX_TYPE[0]) + NAME));           \
-      Args.push_back(                                                          \
-          StringAllocator(DENORMALIZER(TABLE_INDEX, this->KEYPATH)));          \
+      Args.push_back(SPELLING);                                                \
+      Args.push_back(DENORMALIZER(SA, TABLE_INDEX, this->KEYPATH));            \
     }                                                                          \
   }
 
 #include "clang/Driver/Options.inc"
 #undef OPTION_WITH_MARSHALLING_STRING
 #undef OPTION_WITH_MARSHALLING_FLAG
-#undef OPTION_WITH_MARSHALLING
-#undef PREFIX
 }
 
 namespace clang {

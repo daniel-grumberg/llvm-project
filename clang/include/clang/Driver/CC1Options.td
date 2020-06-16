@@ -25,7 +25,7 @@ def target_feature : Separate<["-"], "target-feature">,
 def triple : Separate<["-"], "triple">,
   HelpText<"Specify target triple (e.g. i686-apple-darwin9)">,
   MarshallingInfoString<"TargetOpts->Triple", "llvm::sys::getDefaultTargetTriple()", "std::string">,
-  AlwaysEmit, Normalizer<"normalizeTriple">;
+  AlwaysEmit, Normalizer<"normalizeTriple">, DenormalizeString;
 def target_abi : Separate<["-"], "target-abi">,
   HelpText<"Target a particular ABI type">;
 def target_sdk_version_EQ : Joined<["-"], "target-sdk-version=">,

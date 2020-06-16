@@ -35,6 +35,28 @@ static raw_ostream &write_cstring(raw_ostream &OS, llvm::StringRef Str) {
   return OS;
 }
 
+static const std::string getOptionSpelling(const Record &R,
+                                           size_t &PrefixLength) {
+  std::vector<StringRef> Prefixes = R.getValueAsListOfStrings("Prefixes");
+  StringRef Name = R.getValueAsString("Name");
+  if (Prefixes.empty())
+    return Name.str();
+  PrefixLength = Prefixes[0].size();
+  return (Twine(Prefixes[0]) + Twine(Name)).str();
+}
+
+static const std::string getOptionSpelling(const Record &R) {
+  size_t PrefixLength;
+  return getOptionSpelling(R, PrefixLength);
+}
+
+static void emitNameUsingSpelling(raw_ostream &OS, const Record &R) {
+  size_t PrefixLength;
+  OS << "&";
+  write_cstring(OS, StringRef(getOptionSpelling(R, PrefixLength)));
+  OS << "[" << PrefixLength << "]";
+}
+
 class MarshallingKindInfo {
 public:
   const Record &R;
@@ -45,6 +67,8 @@ public:
   StringRef NormalizedValuesScope;
 
   void emit(raw_ostream &OS) const {
+    write_cstring(OS, StringRef(getOptionSpelling(R)));
+    OS << ", ";
     OS << ShouldAlwaysEmit;
     OS << ", ";
     OS << KeyPath;
@@ -132,7 +156,9 @@ struct SimpleEnumValueTable {
       return {};
     OS << "static const SimpleEnumValue " << ValueTableName << "[] = {\n";
     for (unsigned I = 0, E = Values.size(); I != E; ++I) {
-      OS << "{\"" << Values[I] << "\",";
+      OS << "{";
+      write_cstring(OS, Values[I]);
+      OS << ",";
       OS << "static_cast<unsigned>(";
       emitScopedNormalizedValue(OS, NormalizedValues[I]);
       OS << ")},";
@@ -320,7 +346,7 @@ void EmitOptParser(RecordKeeper &Records, raw_ostream &OS) {
     OS << Prefixes[PrefixKeyT(prf.begin(), prf.end())] << ", ";
 
     // The option string.
-    write_cstring(OS, R.getValueAsString("Name"));
+    emitNameUsingSpelling(OS, R);
 
     // The option identifier name.
     OS << ", " << getOptionName(R);
