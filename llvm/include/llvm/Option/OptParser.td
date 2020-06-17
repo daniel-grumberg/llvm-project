@@ -162,7 +162,7 @@ class MarshallingInfoFlag<code keypath, code defaultvalue>
 // Mixins for additional marshalling attributes.
 
 class IsNegative { bit IsPositive = 0; }
-class AlwaysEmit { bit ShouldWaysEmit = 1; }
+class AlwaysEmit { bit ShouldAlwaysEmit = 1; }
 class Normalizer<code normalizer> { code Normalizer = normalizer; }
 class Denormalizer<code denormalizer> { code Denormalizer = denormalizer; }
 class NormalizedValuesScope<code scope> { code NormalizedValuesScope = scope; }

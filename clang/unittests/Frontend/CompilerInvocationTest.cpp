@@ -61,10 +61,11 @@ TEST_F(CC1CommandLineGenerationTest, CanGenerateCC1CommandLineSeparate) {
 }
 
 TEST_F(CC1CommandLineGenerationTest,
-       CanGenerateCC1CommandLineSeparateRequired) {
-  const char *TripleCStr =
-      llvm::Triple::normalize(llvm::sys::getDefaultTargetTriple()).c_str();
-  const char *Args[] = {"clang", "-xc++", "-triple", TripleCStr, "-"};
+       CanGenerateCC1CommandLineSeparateRequiredPresent) {
+  const std::string DefaultTriple =
+      llvm::Triple::normalize(llvm::sys::getDefaultTargetTriple());
+  const char *Args[] = {"clang", "-xc++", "-triple", DefaultTriple.c_str(),
+                        "-"};
 
   CompilerInvocation CInvok;
   CompilerInvocation::CreateFromArgs(CInvok, Args, *Diags);
@@ -72,7 +73,22 @@ TEST_F(CC1CommandLineGenerationTest,
   CInvok.generateCC1CommandLine(GeneratedArgs, *this);
 
   // Triple should always be emitted even if it is the default
-  ASSERT_THAT(GeneratedArgs, Contains(StrEq(TripleCStr)));
+  ASSERT_THAT(GeneratedArgs, Contains(StrEq(DefaultTriple.c_str())));
+}
+
+TEST_F(CC1CommandLineGenerationTest,
+       CanGenerateCC1CommandLineSeparateRequiredAbsent) {
+  const std::string DefaultTriple =
+      llvm::Triple::normalize(llvm::sys::getDefaultTargetTriple());
+  const char *Args[] = {"clang", "-xc++", "-"};
+
+  CompilerInvocation CInvok;
+  CompilerInvocation::CreateFromArgs(CInvok, Args, *Diags);
+
+  CInvok.generateCC1CommandLine(GeneratedArgs, *this);
+
+  // Triple should always be emitted even if it is the default
+  ASSERT_THAT(GeneratedArgs, Contains(StrEq(DefaultTriple.c_str())));
 }
 
 TEST_F(CC1CommandLineGenerationTest, CanGenerateCC1CommandLineSeparateEnum) {

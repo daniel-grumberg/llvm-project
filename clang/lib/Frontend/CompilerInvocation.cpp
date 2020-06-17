@@ -3940,7 +3940,7 @@ void CompilerInvocation::generateCC1CommandLine(
     HELPTEXT, METAVAR, VALUES, SPELLING, ALWAYS_EMIT, KEYPATH, DEFAULT_VALUE,  \
     NORMALIZER_RET_TY, NORMALIZER, DENORMALIZER, TABLE_INDEX)                  \
   if ((FLAGS & options::CC1Option) &&                                          \
-      (this->KEYPATH != DEFAULT_VALUE || ALWAYS_EMIT)) {                       \
+      (ALWAYS_EMIT || this->KEYPATH != DEFAULT_VALUE)) {                       \
     if (Option::KIND##Class == Option::SeparateClass) {                        \
       Args.push_back(SPELLING);                                                \
       Args.push_back(DENORMALIZER(SA, TABLE_INDEX, this->KEYPATH));            \
