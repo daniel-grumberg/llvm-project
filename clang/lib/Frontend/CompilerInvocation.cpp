@@ -134,7 +134,7 @@ static llvm::Optional<unsigned> normalizeSimpleEnum(OptSpecifier Opt,
   assert(TableIndex < SimpleEnumValueTablesSize);
   const SimpleEnumValueTable &Table = SimpleEnumValueTables[TableIndex];
 
-  auto Arg = Args.getLastArg(Opt);
+  auto *Arg = Args.getLastArg(Opt);
   if (!Arg)
     return None;
 
@@ -171,7 +171,7 @@ static Optional<std::string> normalizeTriple(OptSpecifier Opt, int TableIndex,
                                              const ArgList &Args,
                                              DiagnosticsEngine &Diags) {
 
-  auto Arg = Args.getLastArg(Opt);
+  auto *Arg = Args.getLastArg(Opt);
   if (!Arg)
     return None;
   return llvm::Triple::normalize(Arg->getValue());

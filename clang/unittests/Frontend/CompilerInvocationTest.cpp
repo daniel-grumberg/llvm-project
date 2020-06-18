@@ -7,9 +7,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "clang/Frontend/CompilerInvocation.h"
-#include "clang/Basic/DiagnosticIDs.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "llvm/Support/Host.h"
+
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
