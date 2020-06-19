@@ -164,13 +164,12 @@ static const char *denormalizeSimpleEnum(CompilerInvocation::StringAllocator SA,
 static const char *denormalizeString(CompilerInvocation::StringAllocator SA,
                                      unsigned TableIndex,
                                      const std::string &Value) {
-  return Value.c_str();
+  return SA(Value);
 }
 
 static Optional<std::string> normalizeTriple(OptSpecifier Opt, int TableIndex,
                                              const ArgList &Args,
                                              DiagnosticsEngine &Diags) {
-
   auto *Arg = Args.getLastArg(Opt);
   if (!Arg)
     return None;
