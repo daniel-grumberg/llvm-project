@@ -64,6 +64,7 @@ public:
   const Record &R;
   const char *MacroName;
   bool ShouldAlwaysEmit;
+  StringRef KeyPathPrefix;
   StringRef KeyPath;
   StringRef DefaultValue;
   StringRef NormalizedValuesScope;
@@ -73,7 +74,7 @@ public:
     OS << ", ";
     OS << ShouldAlwaysEmit;
     OS << ", ";
-    OS << KeyPath;
+    OS << KeyPathPrefix << KeyPath;
     OS << ", ";
     emitScopedNormalizedValue(OS, DefaultValue);
     OS << ", ";
@@ -232,6 +233,7 @@ MarshallingKindInfo::create(const Record &R) {
     Ret = MarshallingStringInfo::create(R);
 
   Ret->ShouldAlwaysEmit = R.getValueAsBit("ShouldAlwaysEmit");
+  Ret->KeyPathPrefix = R.getValueAsString("KeyPathPrefix");
   Ret->KeyPath = R.getValueAsString("KeyPath");
   Ret->DefaultValue = R.getValueAsString("DefaultValue");
   if (!isa<UnsetInit>(R.getValueInit("NormalizedValuesScope")))

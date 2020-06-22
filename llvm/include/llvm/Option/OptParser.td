@@ -98,6 +98,7 @@ class Option<list<string> prefixes, string name, OptionKind kind> {
   Option Alias = ?;
   list<string> AliasArgs = [];
   string MarshallingKind = ?;
+  code KeyPathPrefix = "";
   code KeyPath = ?;
   code DefaultValue = ?;
   bit ShouldAlwaysEmit = 0;
