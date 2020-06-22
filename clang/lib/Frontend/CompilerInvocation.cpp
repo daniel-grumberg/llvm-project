@@ -51,7 +51,6 @@
 #include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/None.h"
 #include "llvm/ADT/Optional.h"
-#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
@@ -157,8 +156,8 @@ static const char *denormalizeSimpleEnum(CompilerInvocation::StringAllocator SA,
     if (Value == Table.Table[I].Value)
       return Table.Table[I].Name;
 
-  llvm::report_fatal_error("The simple enum value was not correctly defined in "
-                           "the tablegen option description");
+  llvm_unreachable("The simple enum value was not correctly defined in "
+                   "the tablegen option description");
 }
 
 static const char *denormalizeString(CompilerInvocation::StringAllocator SA,
@@ -3930,8 +3929,8 @@ void CompilerInvocation::generateCC1CommandLine(
                                      ALIAS, ALIASARGS, FLAGS, PARAM, HELPTEXT, \
                                      METAVAR, VALUES, SPELLING, ALWAYS_EMIT,   \
                                      KEYPATH, DEFAULT_VALUE, IS_POSITIVE)      \
-  if (FLAGS & options::CC1Option && IS_POSITIVE != DEFAULT_VALUE &&            \
-      (this->KEYPATH != DEFAULT_VALUE || ALWAYS_EMIT))                         \
+  if (FLAGS & options::CC1Option &&                                            \
+      (ALWAYS_EMIT || this->KEYPATH != DEFAULT_VALUE))                         \
     Args.push_back(SPELLING);
 
 #define OPTION_WITH_MARSHALLING_STRING(                                        \

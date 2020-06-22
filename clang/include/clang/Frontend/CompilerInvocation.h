@@ -190,7 +190,7 @@ public:
   /// Generate a cc1-compatible command line arguments from this instance.
   ///
   /// \param [out] Args - The generated arguments. Note that the caller is
-  /// responsible for insersting the path to the clang executable and "-cc1" if
+  /// responsible for inserting the path to the clang executable and "-cc1" if
   /// desired.
   /// \param SA - A function that given a Twine can allocate storage for a given
   /// command line argument and return a pointer to the newly allocated string.
