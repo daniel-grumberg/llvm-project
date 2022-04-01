@@ -88,6 +88,7 @@ struct APIRecord {
     RK_ObjCInterface,
     RK_ObjCProtocol,
     RK_MacroDefinition,
+    RK_Typedef,
   };
 
 private:
@@ -395,6 +396,30 @@ private:
   virtual void anchor();
 };
 
+/// This holds information associated with typedefs.
+///
+/// Note: Typedefs for anonymous enums and structs typically don't get emitted
+/// by the serializers but still get a TypedefRecord. Instead we use the
+/// typedef name as a name for the underlying anonymous struct or enum.
+struct TypedefRecord : APIRecord {
+  SymbolReference UnderlyingType;
+
+  TypedefRecord(StringRef Name, StringRef USR, PresumedLoc Loc,
+                const AvailabilityInfo &Availability, const DocComment &Comment,
+                DeclarationFragments Declaration,
+                DeclarationFragments SubHeading, SymbolReference UnderlyingType)
+      : APIRecord(RK_Typedef, Name, USR, Loc, Availability, LinkageInfo(),
+                  Comment, Declaration, SubHeading),
+        UnderlyingType(UnderlyingType) {}
+
+  static bool classof(const APIRecord *Record) {
+    return Record->getKind() == RK_Typedef;
+  }
+
+private:
+  virtual void anchor();
+};
+
 /// APISet holds the set of API records collected from given inputs.
 class APISet {
 public:
@@ -563,6 +588,19 @@ public:
                                             DeclarationFragments Declaration,
                                             DeclarationFragments SubHeading);
 
+  /// Create a typedef record into the API set.
+  ///
+  /// Note: the caller is responsible for keeping the StringRef \p Name and
+  /// \p USR alive. APISet::copyString provides a way to copy strings into
+  /// APISet itself, and APISet::recordUSR(const Decl *D) is a helper method
+  /// to generate the USR for \c D and keep it alive in APISet.
+  TypedefRecord *addTypedef(StringRef Name, StringRef USR, PresumedLoc Loc,
+                            const AvailabilityInfo &Availability,
+                            const DocComment &Comment,
+                            DeclarationFragments Declaration,
+                            DeclarationFragments SubHeading,
+                            SymbolReference UnderlyingType);
+
   /// A mapping type to store a set of APIRecord%s with the declaration name as
   /// the key.
   template <typename RecordTy,
@@ -586,6 +624,7 @@ public:
     return ObjCProtocols;
   }
   const RecordMap<MacroDefinitionRecord> &getMacros() const { return Macros; }
+  const RecordMap<TypedefRecord> &getTypedefs() const { return Typedefs; }
 
   /// Generate and store the USR of declaration \p D.
   ///
@@ -625,6 +664,7 @@ private:
   RecordMap<ObjCInterfaceRecord> ObjCInterfaces;
   RecordMap<ObjCProtocolRecord> ObjCProtocols;
   RecordMap<MacroDefinitionRecord> Macros;
+  RecordMap<TypedefRecord> Typedefs;
 };
 
 } // namespace extractapi
