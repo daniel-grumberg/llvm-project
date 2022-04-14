@@ -16,6 +16,7 @@
 
 #include "clang/ExtractAPI/API.h"
 #include "clang/Frontend/FrontendAction.h"
+#include "llvm/ADT/SmallVector.h"
 
 namespace clang {
 
@@ -42,6 +43,10 @@ private:
   /// The input file originally provided on the command line.
   std::vector<std::string> KnownInputFiles;
 
+  /// The strings used to include the original input files into the input
+  /// Buffer.
+  std::vector<std::string> KnownIncludeStrings;
+
   /// Prepare to execute the action on the given CompilerInstance.
   ///
   /// This is called before executing the action on any inputs. This generates a
@@ -57,6 +62,12 @@ private:
 
   static std::unique_ptr<llvm::raw_pwrite_stream>
   CreateOutputFile(CompilerInstance &CI, StringRef InFile);
+
+  /// Generate an appropriate include/import statement for the provided input
+  /// header.
+  ///
+  /// Note this modifies KnownInputFiles and friends.
+  std::string generateHeaderIncludeStatement(const FrontendInputFile &FIF);
 
   static StringRef getInputBufferName() { return "<extract-api-includes>"; }
 };

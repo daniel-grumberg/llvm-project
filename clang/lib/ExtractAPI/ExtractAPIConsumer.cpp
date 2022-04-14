@@ -38,6 +38,7 @@
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/raw_ostream.h"
 #include <memory>
@@ -71,20 +72,56 @@ struct LocationFileChecker {
     if (KnownFileEntries.count(File))
       return true;
 
-    return false;
+    // Check if we found this file previously but decided it wasn't part of the
+    // original inputs.
+    if (UnusedFileEntries.count(File))
+      return false;
+
+    // If file was not found let's see if this is a framework header and check
+    // if it matches an include of an original input file. This is primarily to
+    // resolve headers found via headermaps, as they remap locations.
+    const auto *FileInfo = PP.getHeaderSearchInfo().getExistingFileInfo(File);
+    if (!FileInfo || !FileInfo->IsValid)
+      return false;
+
+    StringRef FileName = File->getName();
+    SmallString<16> IncludeNameStorage;
+    StringRef IncludeName =
+        FileInfo->Framework.empty()
+            ? FileName
+            : (FileInfo->Framework + "/" + llvm::sys::path::filename(FileName))
+                  .toStringRef(IncludeNameStorage);
+
+    if (!KnownIncludeStrings.count(IncludeName)) {
+      // Record that the file was found to avoid future string searches for the
+      // same file.
+      UnusedFileEntries.insert(File);
+      return false;
+    }
+
+    KnownFileEntries.insert(File);
+
+    return true;
   }
 
-  LocationFileChecker(const SourceManager &SM,
-                      const std::vector<std::string> &KnownFiles)
-      : SM(SM) {
+  LocationFileChecker(const SourceManager &SM, const Preprocessor &PP,
+                      const std::vector<std::string> &KnownFiles,
+                      const std::vector<std::string> &KnownIncludes)
+      : SM(SM), PP(PP) {
     for (const auto &KnownFilePath : KnownFiles)
       if (auto FileEntry = SM.getFileManager().getFile(KnownFilePath))
         KnownFileEntries.insert(*FileEntry);
+
+    for (const auto &KnownIncludeStr : KnownIncludes)
+      KnownIncludeStrings.insert(KnownIncludeStr);
   }
 
 private:
   const SourceManager &SM;
+  const Preprocessor &PP;
   llvm::DenseSet<const FileEntry *> KnownFileEntries;
+  llvm::DenseSet<const FileEntry *> UnusedFileEntries;
+  llvm::DenseSet<StringRef> KnownIncludeStrings;
 };
 
 /// The RecursiveASTVisitor to traverse symbol declarations and collect API
@@ -743,14 +780,35 @@ ExtractAPIAction::CreateASTConsumer(CompilerInstance &CI, StringRef InFile) {
       CI.getTarget().getTriple(),
       CI.getFrontendOpts().Inputs.back().getKind().getLanguage());
 
-  auto LCF = std::make_unique<LocationFileChecker>(CI.getSourceManager(),
-                                                   KnownInputFiles);
+  auto LCF = std::make_unique<LocationFileChecker>(
+      CI.getSourceManager(), CI.getPreprocessor(), KnownInputFiles,
+      KnownIncludeStrings);
 
   CI.getPreprocessor().addPPCallbacks(std::make_unique<MacroCallback>(
       CI.getSourceManager(), *LCF, *API, CI.getPreprocessor()));
 
   return std::make_unique<ExtractAPIConsumer>(CI.getASTContext(),
                                               std::move(LCF), *API);
+}
+
+Optional<std::string> generateHeaderIncludeName(const FrontendInputFile &FIF,
+                                                const CompilerInstance &CI) {
+  auto Filename = FIF.getFile();
+
+  static const llvm::Regex FrameworkHeaderRule(
+      "/(.+)\\.framework/(.+)?Headers/(.+)");
+
+  // Let's find out if this header is a framework header
+  SmallVector<StringRef, 4> Matches;
+  FrameworkHeaderRule.match(Filename, &Matches);
+
+  if (Matches.size() != 4) {
+    return None;
+  }
+
+  auto FrameworkName = Matches[1].drop_front(Matches[1].rfind("/") + 1);
+  auto Rest = Matches[3];
+  return Twine(FrameworkName + "/" + Rest).str();
 }
 
 bool ExtractAPIAction::PrepareToExecuteAction(CompilerInstance &CI) {
@@ -762,14 +820,24 @@ bool ExtractAPIAction::PrepareToExecuteAction(CompilerInstance &CI) {
 
   // Convert the header file inputs into a single input buffer.
   SmallString<256> HeaderContents;
+  llvm::raw_svector_ostream OS(HeaderContents);
+
   for (const FrontendInputFile &FIF : Inputs) {
     if (Kind.isObjectiveC())
-      HeaderContents += "#import";
+      OS << "#import";
     else
-      HeaderContents += "#include";
-    HeaderContents += " \"";
-    HeaderContents += FIF.getFile();
-    HeaderContents += "\"\n";
+      OS << "#include";
+
+    OS << " ";
+
+    if (auto HeaderIncludeName = generateHeaderIncludeName(FIF, CI)) {
+      OS << "<" << *HeaderIncludeName << ">";
+      KnownIncludeStrings.emplace_back(*HeaderIncludeName);
+    } else {
+      OS << '"' << FIF.getFile() << '"';
+    }
+
+    OS << "\n";
 
     KnownInputFiles.emplace_back(FIF.getFile());
   }
