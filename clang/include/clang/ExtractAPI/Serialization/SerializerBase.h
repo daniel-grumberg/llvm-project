@@ -41,6 +41,11 @@ protected:
   /// Note: This should be consulted before emitting a symbol.
   const APIIgnoresList &IgnoresList;
 
+  /// The list of symbols to ignore.
+  ///
+  /// Note: This should be consulted before emitting a symbol.
+  const APIIgnoresList &IgnoresList;
+
   APISerializerOption Options;
 
 public:
