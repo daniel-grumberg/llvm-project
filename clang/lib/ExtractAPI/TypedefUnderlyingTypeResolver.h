@@ -26,6 +26,8 @@ namespace clang {
 namespace extractapi {
 
 struct TypedefUnderlyingTypeResolver {
+  /// Gets the underlying type declaration.
+  const NamedDecl *getUnderlyingTypeDecl(QualType Type) const;
 
   /// Get a SymbolReference for the given type.
   SymbolReference getSymbolReferenceForType(QualType Type, APISet &API) const;
@@ -38,7 +40,7 @@ struct TypedefUnderlyingTypeResolver {
 
 private:
   ASTContext &Context;
-};
+  };
 
 } // namespace extractapi
 } // namespace clang

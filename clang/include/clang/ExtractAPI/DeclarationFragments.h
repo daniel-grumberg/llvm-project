@@ -87,9 +87,13 @@ public:
     /// The USR of the fragment symbol, if applicable.
     std::string PreciseIdentifier;
 
-    Fragment(StringRef Spelling, FragmentKind Kind, StringRef PreciseIdentifier)
-        : Spelling(Spelling), Kind(Kind), PreciseIdentifier(PreciseIdentifier) {
-    }
+    /// The associated declaration, if applicable.
+    const Decl *Declaration;
+
+    Fragment(StringRef Spelling, FragmentKind Kind, StringRef PreciseIdentifier,
+             const Decl *Declaration)
+        : Spelling(Spelling), Kind(Kind), PreciseIdentifier(PreciseIdentifier),
+          Declaration(Declaration) {}
   };
 
   const std::vector<Fragment> &getFragments() const { return Fragments; }
@@ -99,14 +103,15 @@ public:
   /// \returns a reference to the DeclarationFragments object itself after
   /// appending to chain up consecutive appends.
   DeclarationFragments &append(StringRef Spelling, FragmentKind Kind,
-                               StringRef PreciseIdentifier = "") {
+                               StringRef PreciseIdentifier = "",
+                               const Decl *Declaration = nullptr) {
     if (Kind == FragmentKind::Text && !Fragments.empty() &&
         Fragments.back().Kind == FragmentKind::Text) {
       // If appending a text fragment, and the last fragment is also text,
       // merge into the last fragment.
       Fragments.back().Spelling.append(Spelling.data(), Spelling.size());
     } else {
-      Fragments.emplace_back(Spelling, Kind, PreciseIdentifier);
+      Fragments.emplace_back(Spelling, Kind, PreciseIdentifier, Declaration);
     }
     return *this;
   }
