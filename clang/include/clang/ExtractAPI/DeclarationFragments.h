@@ -87,7 +87,8 @@ public:
     /// The USR of the fragment symbol, if applicable.
     std::string PreciseIdentifier;
 
-    /// The associated declaration, if applicable.
+    /// The associated declaration, if applicable. This is not intended to be
+    /// used outside of libclang.
     const Decl *Declaration;
 
     Fragment(StringRef Spelling, FragmentKind Kind, StringRef PreciseIdentifier,

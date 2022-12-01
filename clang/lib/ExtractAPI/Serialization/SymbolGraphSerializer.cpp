@@ -760,9 +760,10 @@ void SymbolGraphSerializer::serializeSingleRecord(const APIRecord *Record) {
     serializeStructRecord(*cast<StructRecord>(Record));
     break;
   case APIRecord::RK_ObjCInterface:
-    LLVM_FALLTHROUGH;
+    serializeObjCContainerRecord(*cast<ObjCInterfaceRecord>(Record));
+    break;
   case APIRecord::RK_ObjCProtocol:
-    serializeObjCContainerRecord(*cast<ObjCContainerRecord>(Record));
+    serializeObjCContainerRecord(*cast<ObjCProtocolRecord>(Record));
     break;
   case APIRecord::RK_MacroDefinition:
     serializeMacroDefinitionRecord(*cast<MacroDefinitionRecord>(Record));

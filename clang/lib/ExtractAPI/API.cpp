@@ -246,6 +246,9 @@ APISet::addTypedef(StringRef Name, StringRef USR, PresumedLoc Loc,
 }
 
 APIRecord *APISet::findRecordForUSR(StringRef USR) const {
+  if (USR.empty())
+    return nullptr;
+
   auto It = USRBasedLookupTable.find(USR);
   if (It != USRBasedLookupTable.end())
     return It->second;

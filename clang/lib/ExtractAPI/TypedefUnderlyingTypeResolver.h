@@ -40,7 +40,7 @@ struct TypedefUnderlyingTypeResolver {
 
 private:
   ASTContext &Context;
-  };
+};
 
 } // namespace extractapi
 } // namespace clang

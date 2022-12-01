@@ -77,6 +77,7 @@ struct APIRecord {
   };
 
   /// Stores information about the context of the declaration of this API.
+  /// This is roughly analogous to the DeclContext hierarchy for an AST Node.
   struct HierarchyInformation {
     /// The USR of the parent API.
     StringRef ParentUSR;
@@ -85,7 +86,7 @@ struct APIRecord {
     /// The record kind of the parent API.
     RecordKind ParentKind = RK_Unknown;
     /// A pointer to the parent APIRecord if known.
-    APIRecord *ParentRecord;
+    APIRecord *ParentRecord = nullptr;
 
     HierarchyInformation() = default;
     HierarchyInformation(StringRef ParentUSR, StringRef ParentName,
@@ -125,9 +126,6 @@ struct APIRecord {
   /// Whether the symbol was defined in a system header.
   bool IsFromSystemHeader;
 
-  /// Store hierarchy information for a given record.
-  ///
-  /// This is roughly analogous to the DeclContext hierarchy for an AST Node.
 private:
   const RecordKind Kind;
 
@@ -298,11 +296,6 @@ struct ObjCPropertyRecord : APIRecord {
   bool isReadOnly() const { return Attributes & ReadOnly; }
   bool isDynamic() const { return Attributes & Dynamic; }
 
-  static bool classof(const APIRecord *Record) {
-    return Record->getKind() == RK_ObjCInstanceProperty ||
-           Record->getKind() == RK_ObjCClassProperty;
-  }
-
   virtual ~ObjCPropertyRecord() = 0;
 };
 
@@ -390,11 +383,6 @@ struct ObjCMethodRecord : APIRecord {
                   IsFromSystemHeader),
         Signature(Signature) {}
 
-  static bool classof(const APIRecord *Record) {
-    return Record->getKind() == RK_ObjCClassMethod ||
-           Record->getKind() == RK_ObjCInstanceMethod;
-  }
-
   virtual ~ObjCMethodRecord() = 0;
 };
 
@@ -475,12 +463,6 @@ struct ObjCContainerRecord : APIRecord {
                   Comment, Declaration, SubHeading, IsFromSystemHeader) {}
 
   virtual ~ObjCContainerRecord() = 0;
-
-  static bool classof(const APIRecord *Record) {
-    return Record->getKind() == RK_ObjCProtocol ||
-           Record->getKind() == RK_ObjCInterface ||
-           Record->getKind() == RK_ObjCCategory;
-  }
 };
 
 /// This holds information associated with Objective-C categories.
